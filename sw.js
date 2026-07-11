@@ -1,6 +1,6 @@
 // 筋トレバランス管理 PWA Service Worker
 // ネットワーク優先（更新を取りこぼさない）＋ オフライン時はキャッシュ
-const CACHE = 'kintore-v1';
+const CACHE = 'kintore-2026-07-11a';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
@@ -28,6 +28,8 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return resp;
       })
-      .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+      // オフライン時：キャッシュ優先。ナビゲーション要求のみ index.html へフォールバック
+      // （全GETに index.html を返すと画像・manifest等が破損する 2026-07-08修正）
+      .catch(() => caches.match(e.request).then(r => r || (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined)))
   );
 });
