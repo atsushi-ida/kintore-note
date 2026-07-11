@@ -1,7 +1,7 @@
 // 筋トレバランス管理 PWA Service Worker
 // ネットワーク優先（更新を取りこぼさない）＋ オフライン時はキャッシュ
-const CACHE = 'kintore-2026-07-11c';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const CACHE = 'kintore-2026-07-11d';
+const SHELL = ['./', './index.html', './lucide.min.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -21,6 +21,19 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // 画像はキャッシュ優先（2026-07-11d）：ヒットすれば即返し、無ければfetch→cache.put。
+  // 画像は不変前提なので通信を省いて高速化・データ節約（アプリ本体は下のnetwork-first維持）
+  const isImage = e.request.destination === 'image' || e.request.url.includes('/images/');
+  if (isImage) {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(resp => {
+        const copy = resp.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return resp;
+      }).catch(() => caches.match(e.request)))
+    );
+    return;
+  }
   e.respondWith(
     fetch(e.request)
       .then(resp => {

@@ -244,6 +244,13 @@
   .star:hover{color:var(--mid);}
   .star.on{color:var(--mid);}
   .star svg{width:17px;height:17px;}
+  /* ---- backup reminder bar ---- */
+  .backup-bar{display:flex;align-items:center;gap:8px;background:#fef3c7;color:#7c5b12;border:1px solid #f5d67a;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:13px;font-weight:600;}
+  body[data-theme="dark"] .backup-bar{background:#3a2f14;color:#f0d48a;border-color:#5c4a1e;}
+  .backup-bar .bb-msg{flex:1;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .backup-bar .bb-msg svg.lucide{width:15px;height:15px;flex:none;}
+  .backup-bar .bb-x{background:none;border:none;color:inherit;font-size:18px;line-height:1;cursor:pointer;padding:0 2px;opacity:.7;}
+  .backup-bar .bb-x:hover{opacity:1;}
   /* ---- lucide icons ---- */
   i[data-lucide]{display:inline-flex; width:1em; height:1em;}
   svg.lucide{width:18px;height:18px;stroke-width:1.6;vertical-align:-.18em;flex:none;}
@@ -362,6 +369,7 @@
 <div class="wrap">
   <!-- ===== 記録 ===== -->
   <div class="view active" id="v-record">
+    <div id="backup-reminder"></div>
     <div id="rec-advice"></div>
     <div id="rec-templates"></div>
     <div class="card">
@@ -578,7 +586,9 @@
       </div>
       <input type="file" id="imp" accept="application/json" style="display:none" onchange="importData(event)">
       <button class="btn sec mt" onclick="exportCSV()">CSVで書き出し（履歴）</button>
+      <div id="restore-wrap"></div>
       <button class="btn danger mt" onclick="wipeAll()">全データを削除</button>
+      <p class="note" id="persist-status" style="margin-top:8px">ストレージ保護: 確認中…</p>
       <p class="note">データはこの端末のブラウザ内に保存され、端末間では自動同期されません。<br>
       <b>端末間の同期手順：</b>スマホで「JSONバックアップ」→共有シートで<b>Googleドライブに保存</b>。PCでドライブから開き「JSON読み込み」で取り込み（戻す時は逆）。<br>
       ※読み込むと現在のデータは上書きされます。共有シートが出ない端末ではダウンロード保存になります。</p>
@@ -662,7 +672,7 @@
 <div class="gal-viewer" id="gal-viewer"></div>
 
 <script src="gallery.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="lucide.min.js"></script>
 <script>
 //=========== 部位定義 ===========
 const PARTS = [
@@ -761,7 +771,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.11c";
+const APP_VERSION="2026.07.11d";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -771,7 +781,7 @@ function defaultDB(){
   return {
     exercises: DEFAULT_EXERCISES.map((e,i)=>({id:"d"+i, name:e[0], part:e[1], sec:(SECONDARY[e[0]]||[]).filter(k=>k!==e[1]), fav:false})),
     logs: [], bodyweight: [], goals: [], templates: [],
-    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner" }
+    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner", lastBackupAt:null }
   };
 }
 function load(){
@@ -793,6 +803,7 @@ function load(){
       d.settings.phase = d.settings.phase || "maintain";
       d.settings.goal = d.settings.goal || "hypertrophy";       // アドバイス機能：目的（既定=筋肥大）
       d.settings.kegelLevel = d.settings.kegelLevel || "beginner"; // ケーゲル：レベル（既定=初級）
+      if(!('lastBackupAt' in d.settings)) d.settings.lastBackupAt = null; // バックアップ日：既存スキーマ非破壊で補完（2026-07-11d）
       d.exercises.forEach(e=>{ if(!e.sec) e.sec=(SECONDARY[e.name]||[]).filter(k=>k!==e.part); });
       return d;
     }
@@ -2471,17 +2482,75 @@ function renderSettings(){
 }
 
 //=========== 入出力 ===========
+//=========== F-A：ストレージ永続化・バックアップ日 ===========
+// 起動時に永続ストレージを要求し、結果は内部保持（consoleに出さない）
+async function requestPersistentStorage(){
+  try{
+    if(navigator.storage && navigator.storage.persist){
+      const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+      if(!already) await navigator.storage.persist(); // 却下されても例外は投げない
+    }
+  }catch(_){}
+  updatePersistLabel();
+}
+async function updatePersistLabel(){
+  const el=document.getElementById('persist-status'); if(!el) return;
+  let txt='ストレージ保護: 未対応';
+  try{
+    if(navigator.storage && navigator.storage.persisted){
+      const p=await navigator.storage.persisted();
+      txt='ストレージ保護: '+(p?'有効':'未許可');
+    }
+  }catch(_){}
+  el.textContent=txt;
+}
+function daysSinceBackup(){ // lastBackupAt からの経過日数。無ければ Infinity
+  const s=DB.settings.lastBackupAt; if(!s) return Infinity;
+  const d=new Date(s+'T00:00:00'), now=new Date(todayStr()+'T00:00:00');
+  return Math.round((now-d)/86400000);
+}
+function markBackupDone(){ // エクスポート成功後にのみ呼ぶ（規約：成功後のみ更新）
+  DB.settings.lastBackupAt=todayStr(); save(); renderBackupReminder();
+}
+// 記録タブ上部の警告バー。logs≥10 かつ（未バックアップ or 30日以上前）で表示。×は当日のみ非表示(sessionStorage)
+function renderBackupReminder(){
+  const box=document.getElementById('backup-reminder'); if(!box) return;
+  box.innerHTML='';
+  if(sessionStorage.getItem('backupReminderDismissed')===todayStr()) return;
+  if(DB.logs.length<10) return;
+  const dys=daysSinceBackup();
+  if(isFinite(dys) && dys<30) return;
+  const label = isFinite(dys) ? ('バックアップから'+dys+'日') : 'まだバックアップしていません';
+  box.innerHTML='<div class="backup-bar"><span class="bb-msg" onclick="exportData()">'
+    +'<i data-lucide="triangle-alert"></i> ⚠️'+esc(label)+'。書き出す</span>'
+    +'<button class="bb-x" onclick="dismissBackupReminder()" aria-label="閉じる">×</button></div>';
+  refreshIcons();
+}
+function dismissBackupReminder(){ sessionStorage.setItem('backupReminderDismissed', todayStr()); renderBackupReminder(); }
+// 設定タブ・データ管理欄の可変表示（復元ボタン＋ストレージ保護状態）
+function renderDataManage(){
+  const w=document.getElementById('restore-wrap');
+  if(w){
+    if(localStorage.getItem(LS+':preimport')!=null){
+      w.innerHTML='<button class="btn sec mt" onclick="restorePreimport()"><i data-lucide="undo-2"></i> 取込前データを復元</button>';
+    } else { w.innerHTML=''; }
+  }
+  updatePersistLabel();
+  refreshIcons();
+}
 async function exportData(){
   const json=JSON.stringify(DB,null,2), fname='筋トレデータ_'+todayStr()+'.json';
   try{
     const file=new File([json],fname,{type:'application/json'});
     if(navigator.canShare && navigator.canShare({files:[file]})){ // スマホ：共有シート(Driveに保存可)
       await navigator.share({files:[file], title:fname, text:'筋トレデータのバックアップ'});
+      markBackupDone(); // 共有成功後にのみ更新
       return;
     }
-  }catch(e){ if(e&&e.name==='AbortError') return; } // 共有キャンセルは何もしない
+  }catch(e){ if(e&&e.name==='AbortError') return; } // 共有キャンセルは何もしない（バックアップ日は更新しない）
   const blob=new Blob([json],{type:'application/json'}); // PC等：ダウンロード
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
+  markBackupDone(); // ダウンロード実行後に更新
 }
 function exportCSV(){
   let csv='date,part,exercise,set,weight,reps,volume,rpe,memo\n';
@@ -2491,8 +2560,25 @@ function exportCSV(){
   a.href=URL.createObjectURL(blob); a.download='筋トレ履歴_'+todayStr()+'.csv'; a.click();
 }
 function importData(e){ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
-  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.exercises&&d.logs){ localStorage.setItem(LS,JSON.stringify(d)); DB=load(); initRender(); toast('読み込みました'); } else toast('形式が違います'); }catch(err){ toast('読み込み失敗'); } };
+  r.onload=()=>{
+    let d;
+    try{ d=JSON.parse(r.result); }catch(err){ toast('読み込み失敗'); e.target.value=''; return; } // パース失敗は従来どおり中断
+    if(!(d.exercises && d.logs)){ toast('形式が違います'); e.target.value=''; return; }
+    const curL=DB.logs.length, curE=DB.exercises.length;
+    const newL=Array.isArray(d.logs)?d.logs.length:0, newE=Array.isArray(d.exercises)?d.exercises.length:0;
+    if(!confirm('現在: ログ'+curL+'件/種目'+curE+'件\n→ 取込後: ログ'+newL+'件/種目'+newE+'件\n\n上書きしますか？')){ e.target.value=''; return; }
+    try{ save(); const cur=localStorage.getItem(LS); if(cur!=null) localStorage.setItem(LS+':preimport', cur); }catch(_){} // 上書き前に現在データを1世代退避
+    localStorage.setItem(LS,JSON.stringify(d)); DB=load(); initRender();
+    toast('読み込みました。直前データは退避済み（設定→復元）');
+    e.target.value='';
+  };
   r.readAsText(f); }
+function restorePreimport(){
+  const raw=localStorage.getItem(LS+':preimport');
+  if(raw==null){ toast('退避データがありません'); return; }
+  if(!confirm('取込前のデータに戻します。現在のデータは上書きされます。よろしいですか？')) return;
+  localStorage.setItem(LS, raw); DB=load(); initRender(); toast('取込前のデータに復元しました');
+}
 function wipeAll(){ if(!confirm('全データを削除します。元に戻せません。よろしいですか？')) return;
   if(!confirm('本当に削除しますか？事前にJSON書き出しを推奨します。')) return;
   localStorage.removeItem(LS); localStorage.removeItem('kintore_balance_v1'); DB=defaultDB(); save(); initRender(); toast('削除しました'); }
@@ -2599,11 +2685,13 @@ function initRender(){
   fillFilter(); fillExSelect(); fillPartSelect(); renderExList();
   document.getElementById('set-list').innerHTML=''; addSetRow();
   renderTodayLogs(); renderRecommend(); renderTemplates();
+  renderBackupReminder(); renderDataManage();
   // 破損データを退避して初期化した場合は起動時に案内（退避キー kintore_balance_v2:broken:… に生データが残っている）
   if(_brokenStashed){ setTimeout(()=>toast('⚠️保存データが読めず初期化しました。退避済みなので復元可能です'), 400); }
 }
 document.getElementById('rec-date').addEventListener('change',()=>{ renderTodayLogs(); });
 initRender();
+requestPersistentStorage(); // 起動時に永続ストレージを要求（結果は内部保持・ラベル更新）
 // PWA: Service Worker登録（オフライン起動・ホーム画面アプリ用）
 if('serviceWorker' in navigator && !location.search.includes('nosw')){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
 </script>
