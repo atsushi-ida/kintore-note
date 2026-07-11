@@ -1,7 +1,7 @@
 // 筋トレバランス管理 PWA Service Worker
 // ネットワーク優先（更新を取りこぼさない）＋ オフライン時はキャッシュ
-const CACHE = 'kintore-2026-07-11a';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'kintore-2026-07-11c';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

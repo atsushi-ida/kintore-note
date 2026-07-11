@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="筋トレ管理">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -181,7 +181,8 @@
   /* 種目カード画像（GPT作成）表示 */
   .ex-photo{background:var(--panel2); border:1px solid var(--line); border-radius:var(--r-lg); padding:10px; text-align:center;}
   body[data-theme="light"] .ex-photo{background:var(--paper-2);}
-  .ex-photo img{width:auto; max-width:min(100%,300px); border-radius:10px; display:inline-block; vertical-align:middle;}
+  /* 表示幅を全種目280pxに統一（原寸が小さいカードも拡大表示・鮮明さは@2x版で補強） */
+  .ex-photo img{width:min(100%,280px); height:auto; border-radius:10px; display:inline-block; vertical-align:middle;}
   .mm-toggle{display:inline-block; margin-top:8px; font-size:12px; color:var(--sub); text-decoration:underline; cursor:pointer;}
   .mus{transition:opacity .12s var(--ease-out);}
   #heatmap .mus{cursor:pointer;}
@@ -283,6 +284,32 @@
   .rec-chip:hover{border-color:var(--accent);}
   .rec-chip .pct{color:var(--warn); font-variant-numeric:tabular-nums;}
   .rec-chip .arw{color:var(--sub);}
+  /* ---- コーチ（F3） ---- */
+  .coach-none{padding:6px 0; font-size:13px; display:flex; align-items:center; gap:6px;}
+  .cm-item{border:1px solid var(--line); border-radius:var(--r-md); padding:11px 12px; margin-bottom:9px; background:var(--panel2);}
+  body[data-theme="light"] .cm-item{background:var(--paper-2);}
+  .cm-title{display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:700; color:var(--txt); margin-bottom:6px;}
+  .cm-presc{font-size:13px; color:var(--txt2); margin-bottom:8px;}
+  .cm-tags{display:flex; flex-wrap:wrap; gap:6px;}
+  .cm-tag{display:inline-flex; align-items:center; font-size:12px; font-weight:600; padding:4px 9px; border-radius:var(--r-pill);
+    background:var(--panel); border:1px solid var(--line); color:var(--txt2);}
+  .cm-tag.ok{background:color-mix(in srgb,#2e9e5b 16%,transparent); border-color:color-mix(in srgb,#2e9e5b 40%,transparent); color:var(--txt);}
+  .cm-tag.warn2{background:color-mix(in srgb,#e0a800 18%,transparent); border-color:color-mix(in srgb,#e0a800 45%,transparent); color:var(--txt);}
+  .cm-tag.bad{background:color-mix(in srgb,#d64541 16%,transparent); border-color:color-mix(in srgb,#d64541 42%,transparent); color:var(--txt);}
+  .cm-pr{margin-top:8px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; gap:6px;
+    background:color-mix(in srgb,var(--accent) 12%,transparent); border:1px dashed color-mix(in srgb,var(--accent) 45%,transparent); border-radius:var(--r-md); padding:7px 10px;}
+  .cm-sub{font-size:12.5px; color:var(--sub); font-weight:600; display:flex; align-items:center; gap:5px; margin:6px 0 7px;}
+  /* ---- 定型メニュー（F2） ---- */
+  .tmpl-chip{display:inline-flex; align-items:stretch; margin:0 8px 8px 0; border:1px solid var(--line);
+    border-radius:var(--r-pill); overflow:hidden; background:var(--panel2);}
+  body[data-theme="light"] .tmpl-chip{background:var(--paper-2);}
+  .tmpl-chip .tc-main{border:0; background:transparent; color:var(--txt); font-size:12.5px; font-weight:600;
+    padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;}
+  .tmpl-chip .tc-main:hover{background:var(--accent-soft);}
+  .tmpl-chip .tc-edit,.tmpl-chip .tc-del{border:0; border-left:1px solid var(--line); background:transparent; color:var(--sub);
+    padding:0 9px; cursor:pointer; font-size:13px; line-height:1;}
+  .tmpl-chip .tc-edit:hover,.tmpl-chip .tc-del:hover{background:var(--accent-soft); color:var(--txt);}
+  .tmpl-chip .tc-cnt{color:var(--sub); font-weight:500;}
   .advice-part{border:1px solid var(--line); border-radius:var(--r-md); padding:11px 12px; margin-bottom:9px; background:var(--panel2);}
   body[data-theme="light"] .advice-part{background:var(--paper-2);}
   .advice-part .ah{display:flex; align-items:baseline; gap:8px; font-size:13.5px; font-weight:700; color:var(--txt); margin-bottom:7px;}
@@ -336,6 +363,7 @@
   <!-- ===== 記録 ===== -->
   <div class="view active" id="v-record">
     <div id="rec-advice"></div>
+    <div id="rec-templates"></div>
     <div class="card">
       <h2>今日のトレーニングを記録</h2>
       <div class="row">
@@ -733,7 +761,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.11a";
+const APP_VERSION="2026.07.11c";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -742,7 +770,7 @@ function defaultDB(){
   PARTS.forEach(p=>{ targets[p.key]=p.target; coef[p.key]=p.coef; });
   return {
     exercises: DEFAULT_EXERCISES.map((e,i)=>({id:"d"+i, name:e[0], part:e[1], sec:(SECONDARY[e[0]]||[]).filter(k=>k!==e[1]), fav:false})),
-    logs: [], bodyweight: [], goals: [],
+    logs: [], bodyweight: [], goals: [], templates: [],
     settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner" }
   };
 }
@@ -753,6 +781,7 @@ function load(){
     if(d && d.exercises){
       d.bodyweight = d.bodyweight || [];
       d.goals = d.goals || [];   // 目標設定機能：既存スキーマ非破壊で補完（2026-07-10d）
+      d.templates = d.templates || [];   // 定型メニュー：既存スキーマ非破壊で補完（2026-07-11b）
       d.settings = d.settings || {};
       const def = defaultDB().settings;
       d.settings.targets = Object.assign({}, def.targets, d.settings.targets||{});
@@ -824,7 +853,7 @@ document.querySelectorAll('.tabs button').forEach(b=>{
     document.getElementById('v-'+b.dataset.v).classList.add('active');
     if(b.dataset.v==='balance') renderBalance();
     if(b.dataset.v==='history') renderHistory();
-    if(b.dataset.v==='record'){ renderTodayLogs(); renderRecommend(); }
+    if(b.dataset.v==='record'){ renderTodayLogs(); renderRecommend(); renderTemplates(); }
     if(b.dataset.v==='weight') renderWeight();
     if(b.dataset.v==='settings') renderSettings();
     if(b.dataset.v==='strength') renderStrength();
@@ -1246,29 +1275,111 @@ function recExercisesFor(part, n){
   if(out.length<n){ DB.exercises.filter(e=>e.part===part).forEach(e=>{ if(!out.includes(e.name)) out.push(e.name); }); }
   return out.slice(0,n);
 }
-// 機能A：今日のおすすめ（達成率が低い順に部位トップ3・7日基準）
+// 機能A＋F3：🎯コーチ（今週のミッション＋不足部位おすすめ）。カードは増やさず「今日のおすすめ」を改組
 function renderRecommend(){
   const box=document.getElementById('rec-advice'); if(!box) return;
+  const missions=coachMissions();
   const logs=logsInDays(7);
   const {sets}=computeStats(logs);
   const total=PARTS.reduce((s,p)=>s+sets[p.key],0);
+  let chipsSection;
   if(total<=0){
-    box.innerHTML=`<div class="card"><h2><i data-lucide="lightbulb"></i> 今日のおすすめ</h2>`
-      +`<p class="muted" style="margin:0">まず1週間記録すると提案が出ます。</p></div>`;
-    refreshIcons(); return;
+    chipsSection=`<div class="cm-sub"><i data-lucide="lightbulb"></i> 今日のおすすめ</div>`
+      +`<p class="muted" style="margin:0">まず1週間記録すると、不足しがちな部位の提案が出ます。</p>`;
+  } else {
+    const rate={}; PARTS.forEach(p=>{ rate[p.key]=(sets[p.key]/1)/targetOf(p.key); }); // 7日=1週
+    const low=[...PARTS].sort((a,b)=>rate[a.key]-rate[b.key]).slice(0,3);
+    const chips=low.map(p=>{
+      const nm=recExercisesFor(p.key,1)[0]; if(!nm) return '';
+      return `<button class="rec-chip" onclick="pickRecExercise('${esc(nm).replace(/'/g,"\\'")}')">`
+        +`<span style="color:${p.color};font-weight:700">${p.name}</span>`
+        +`<span class="pct">${Math.round(rate[p.key]*100)}%</span><span class="arw">→</span>${esc(nm)}</button>`;
+    }).join('');
+    chipsSection=`<div class="cm-sub"><i data-lucide="lightbulb"></i> 直近7日・不足しがちな部位のおすすめ</div>`
+      +`<div>${chips}</div>`
+      +`<p class="note" style="margin-top:8px">タップするとその種目がセットされます。一般的なガイドラインに基づく自動提案です。</p>`;
   }
-  const rate={}; PARTS.forEach(p=>{ rate[p.key]=(sets[p.key]/1)/targetOf(p.key); }); // 7日=1週
-  const low=[...PARTS].sort((a,b)=>rate[a.key]-rate[b.key]).slice(0,3);
-  const chips=low.map(p=>{
-    const nm=recExercisesFor(p.key,1)[0]; if(!nm) return '';
-    return `<button class="rec-chip" onclick="pickRecExercise('${esc(nm).replace(/'/g,"\\'")}')">`
-      +`<span style="color:${p.color};font-weight:700">${p.name}</span>`
-      +`<span class="pct">${Math.round(rate[p.key]*100)}%</span><span class="arw">→</span>${esc(nm)}</button>`;
-  }).join('');
-  box.innerHTML=`<div class="card"><h2><i data-lucide="lightbulb"></i> 今日のおすすめ <span class="r">直近7日・達成率が低い部位</span></h2>`
-    +`<div>${chips}</div>`
-    +`<p class="note" style="margin-top:8px">タップするとその種目がセットされます。一般的なガイドラインに基づく自動提案です。</p></div>`;
+  box.innerHTML=`<div class="card"><h2><i data-lucide="target"></i> コーチ</h2>${missions}${chipsSection}</div>`;
   refreshIcons();
+}
+// F3：目標達成コーチのミッション群（アクティブなlift目標ごと）。文言はすべて「目安」
+const COACH_PACE={ strength:{pct:0.825, scheme:'5×5'}, hypertrophy:{pct:0.70, scheme:'3×10'}, maintain:{pct:0.70, scheme:'2×8'} };
+function coachMissions(){
+  const goals=(DB.goals||[]).filter(g=>g.type==='lift' && !g.done);
+  if(!goals.length) return `<div class="coach-none muted"><i data-lucide="target"></i> 筋力タブで目標を設定するとコーチが始まります。</div>`;
+  const wk7=logsInDays(7);
+  return goals.map(g=>{
+    const ex=DB.exercises.find(e=>e.name===g.exName);
+    const est=estimateGoal(g);
+    const current=est.current||0;
+    // 今週の処方（目的セグ×現在e1RM・2.5kg丸め）
+    const P=COACH_PACE[DB.settings.goal||'hypertrophy']||COACH_PACE.hypertrophy;
+    const presLine = current>0
+      ? `<div class="cm-presc">今週の目安：<b>${esc(g.exName)} ${round2_5(current*P.pct)}kg ${P.scheme}</b> <span class="muted">（推定1RMの${Math.round(P.pct*100)}%・週2〜3回）</span></div>`
+      : `<div class="cm-presc muted">${esc(g.exName)}：記録がたまると今週の重量目安が出ます。</div>`;
+    // 頻度ミッション（直近7日・週2回目安）
+    const doneCnt = ex ? wk7.filter(l=>l.exId===ex.id).length : 0;
+    const need = Math.max(0, 2-doneCnt);
+    const freqLine = need>0
+      ? `<span class="cm-tag">今週あと<b>${need}回</b>（週2回が目安）</span>`
+      : `<span class="cm-tag ok">✅ 今週の頻度クリア</span>`;
+    // ペース判定（3分岐）
+    const pace=paceStatus(g, est);
+    const paceLine=`<span class="cm-tag ${pace.cls}">${pace.msg}</span>`;
+    // PR挑戦の合図
+    const pr=prSignal(ex);
+    const prLine= pr ? `<div class="cm-pr"><i data-lucide="flame"></i> ${pr}</div>` : '';
+    return `<div class="cm-item">
+      <div class="cm-title"><i data-lucide="target"></i> 今週のミッション：${esc(g.exName)}</div>
+      ${presLine}
+      <div class="cm-tags">${freqLine}${paceLine}</div>
+      ${prLine}
+    </div>`;
+  }).join('');
+}
+// ペース判定：直近4週の週次最大e1RM傾き vs 予測に必要な週次ペース（3分岐）。ログ4週未満は判定せず
+function paceStatus(goal, est){
+  const ex=DB.exercises.find(e=>e.name===goal.exName);
+  if(!ex) return {cls:'', msg:'記録を続けるとペース判定が出ます'};
+  const logs=DB.logs.filter(l=>l.exId===ex.id);
+  const today=parseDate(todayStr());
+  const wk={};
+  logs.forEach(l=>{
+    const d=Math.round((today-parseDate(l.date))/86400000); if(d<0) return;
+    const wi=Math.floor(d/7); if(wi>=16) return;
+    const e=l.sets.reduce((m,s)=>Math.max(m,epley(s.weight,s.reps)),0);
+    wk[wi]=Math.max(wk[wi]||0, e);
+  });
+  const keys=Object.keys(wk).map(Number).sort((a,b)=>a-b);
+  if(keys.length<4) return {cls:'', msg:'記録を続けるとペース判定が出ます'};
+  // 直近4週（wi 0..3）の存在点で最小二乗（x=-wi＝未来ほど大）。点が足りなければ全系列で代替
+  let pts=keys.filter(w=>w<4).map(w=>({x:-w, y:wk[w]}));
+  if(pts.length<2) pts=keys.map(w=>({x:-w, y:wk[w]}));
+  const n=pts.length; let sx=0,sy=0,sxx=0,sxy=0;
+  pts.forEach(p=>{ sx+=p.x; sy+=p.y; sxx+=p.x*p.x; sxy+=p.x*p.y; });
+  const dn=n*sxx-sx*sx; const b= dn!==0 ? (n*sxy-sx*sy)/dn : 0; // kg/週
+  const current=est.current||0, target=est.target||0, gap=target-current;
+  if(gap<=0) return {cls:'ok', msg:'🟢 目標到達'};
+  if(b<=0) return {cls:'bad', msg:'🔴 停滞：重量を8〜10%落として2週で戻すディロードが目安'};
+  // 予測に必要な週次ペース＝残りギャップ÷予測残週数
+  const weeksRem = est.weeks!=null ? est.weeks : (est.months!=null ? est.months*4.345 : 0);
+  const need = weeksRem>0 ? gap/weeksRem : Infinity;
+  if(b>=need*0.8) return {cls:'ok', msg:'🟢 順調'};
+  return {cls:'warn2', msg:'🟡 やや遅れ：週あと1セッション増やすかセット+1が目安'};
+}
+// PR挑戦の合図：前回その種目で全セット目標レップ達成なら次の増量に挑戦（表示のみ・目安）
+function prSignal(ex){
+  if(!ex) return '';
+  const last=lastLogFor(ex.id); if(!last) return '';
+  const anyWeight=DB.logs.filter(l=>l.exId===ex.id).some(l=>l.sets.some(s=>s.weight>0));
+  if(!anyWeight) return '';
+  const tgtReps=GOAL_TARGET_REPS[DB.settings.goal||'hypertrophy'];
+  const maxW=Math.max(...last.sets.map(s=>s.weight||0));
+  if(maxW<=0) return '';
+  if(!last.sets.every(s=>s.reps>=tgtReps)) return '';
+  const isLeg = ex.part==='legs' || /デッドリフト|スクワット/.test(ex.name);
+  const inc=isLeg?5:2.5;
+  return `今日は<b>+${inc}kg</b>に挑戦する日（前回は全セット${tgtReps}回達成）— あくまで目安です`;
 }
 // チップタップ：rec-ex をその種目に設定し change 発火（人体図/カード画像も連動）
 function pickRecExercise(name){
@@ -1278,6 +1389,79 @@ function pickRecExercise(name){
   sel.dispatchEvent(new Event('change'));
   document.querySelector('#v-record .card').scrollIntoView({behavior:'smooth', block:'start'});
   toast(ex.name+' をセットしました');
+}
+
+//=========== F2：定型メニューテンプレート ===========
+// DB.templates=[{id,name,exIds:[...]}]。重量は保存しない＝展開時に最新ログからプリフィル（設計判断）
+function recDate(){ return document.getElementById('rec-date').value||todayStr(); }
+function todaysExIds(){ // 今日のメニュー（rec-date）の種目ID（出現順・重複排除）
+  const d=recDate(); const seen=new Set(); const out=[];
+  DB.logs.filter(l=>l.date===d).forEach(l=>{ if(!seen.has(l.exId)){ seen.add(l.exId); out.push(l.exId); } });
+  return out;
+}
+function renderTemplates(){
+  const box=document.getElementById('rec-templates'); if(!box) return;
+  const tpls=DB.templates||[];
+  const chips = tpls.length ? tpls.map(t=>{
+    const cnt=(t.exIds||[]).filter(id=>DB.exercises.some(e=>e.id===id)).length;
+    return `<span class="tmpl-chip">`
+      +`<button class="tc-main" onclick="expandTemplate('${t.id}')">${ic('clipboard-list')} ${esc(t.name)} <span class="tc-cnt">${cnt}種目</span></button>`
+      +`<button class="tc-edit" onclick="renameTemplate('${t.id}')" title="名前変更">${ic('pencil')}</button>`
+      +`<button class="tc-del" onclick="deleteTemplate('${t.id}')" title="削除">${ic('x')}</button>`
+      +`</span>`;
+  }).join('') : `<p class="muted" style="margin:2px 0 8px">定型メニューはまだありません。今日のメニューを作ってから「＋今日のメニューから保存」で登録できます。</p>`;
+  box.innerHTML=`<div class="card"><h2>${ic('clipboard-list')} 定型メニュー</h2>`
+    +`<div>${chips}</div>`
+    +`<button class="btn sec small" onclick="saveTemplateFromToday()">${ic('plus')} 今日のメニューから保存</button>`
+    +`<p class="note" style="margin-top:8px">チップをタップすると今日のメニューに展開します（各種目の最新の重量が入ります）。重量を確認して保存してください。</p></div>`;
+  refreshIcons();
+}
+function expandTemplate(id){
+  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+  const d=recDate();
+  const already=new Set(DB.logs.filter(l=>l.date===d).map(l=>l.exId));
+  let added=0, skipped=0;
+  (t.exIds||[]).forEach(exId=>{
+    const ex=DB.exercises.find(e=>e.id===exId); if(!ex) return; // 削除済み種目は無視
+    if(already.has(exId)){ skipped++; return; }               // 二重追加しない
+    const last=lastLogFor(exId);
+    const sets = last ? last.sets.map(s=>({weight:s.weight, reps:s.reps})) : [{weight:0, reps:0}]; // 無ければ空1行
+    addLogEntry(exId, sets, {date:d});
+    already.add(exId); added++;
+  });
+  renderTodayLogs(); renderRecommend(); renderTemplates();
+  if(added){
+    document.querySelector('#today-logs').scrollIntoView({behavior:'smooth', block:'center'});
+    toast(`${added}種目を展開しました。重量を確認して保存してください${skipped?`（${skipped}種目は追加済みのためスキップ）`:''}`);
+  } else if(skipped){ toast(`全${skipped}種目が今日のメニューに追加済みでした`); }
+  else { toast('展開できる種目がありません'); }
+}
+function saveTemplateFromToday(){
+  const exIds=todaysExIds();
+  if(!exIds.length){ toast('今日のメニューが空です。先に種目を追加してください'); return; }
+  const name=(prompt('テンプレート名（例：上半身の日）', '') || '').trim();
+  if(!name) return;
+  DB.templates=DB.templates||[];
+  const dup=DB.templates.find(t=>t.name===name);
+  if(dup){
+    if(!confirm(`「${name}」は既にあります。上書きしますか？`)) return;
+    dup.exIds=exIds;
+  } else {
+    DB.templates.push({id:uid(), name, exIds});
+  }
+  save(); renderTemplates(); toast(`テンプレ「${name}」を保存しました（${exIds.length}種目）`);
+}
+function renameTemplate(id){
+  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+  const name=(prompt('新しいテンプレート名', t.name) || '').trim();
+  if(!name || name===t.name) return;
+  if((DB.templates||[]).some(x=>x.id!==id && x.name===name)){ toast('同名のテンプレートが既にあります'); return; }
+  t.name=name; save(); renderTemplates(); toast('名前を変更しました');
+}
+function deleteTemplate(id){
+  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+  if(!confirm(`テンプレ「${t.name}」を削除しますか？`)) return;
+  DB.templates=(DB.templates||[]).filter(x=>x.id!==id); save(); renderTemplates(); toast('削除しました');
 }
 // 筋力タブの1RM比ロジックを関数化（renderStrength と 機能B が共用）
 function benchRatios(data){ // data: [{key,rm,...}] rm>0 の配列（length>=2 前提）
@@ -2414,7 +2598,7 @@ function initRender(){
   document.getElementById('bw-date').value=todayStr();
   fillFilter(); fillExSelect(); fillPartSelect(); renderExList();
   document.getElementById('set-list').innerHTML=''; addSetRow();
-  renderTodayLogs(); renderRecommend();
+  renderTodayLogs(); renderRecommend(); renderTemplates();
   // 破損データを退避して初期化した場合は起動時に案内（退避キー kintore_balance_v2:broken:… に生データが残っている）
   if(_brokenStashed){ setTimeout(()=>toast('⚠️保存データが読めず初期化しました。退避済みなので復元可能です'), 400); }
 }
