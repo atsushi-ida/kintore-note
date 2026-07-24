@@ -771,7 +771,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.18n";
+const APP_VERSION="2026.07.18o";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -2668,6 +2668,72 @@ function migratePilates(){ // ピラティス（マット）種目
   ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
   DB.settings.pilatesV1=true; save();
 }
+function migrateNewCards2026(){ // S26〜S40の新種目59（2026-07 GPTカード）
+  if(DB.settings.newEx2026V1) return;
+  const ADD=[
+    ["パワークリーン","back",["legs","shoulder"]],
+    ["プッシュプレス","shoulder",["triceps","legs"]],
+    ["グッドモーニング","legs",["back"]],
+    ["ケトルベルスイング","legs",["back"]],
+    ["斜め懸垂","back",["biceps"]],
+    ["パイクプッシュアップ","shoulder",["triceps","back"]],
+    ["バーピー","legs",["chest","core"]],
+    ["マウンテンクライマー","core",["legs","shoulder"]],
+    ["デッドバグ","core",["legs"]],
+    ["パロフプレス","core",["shoulder"]],
+    ["ケーブルウッドチョップ","core",["shoulder","legs"]],
+    ["ゴブレットスクワット","legs",[]],
+    ["ステップアップ","legs",[]],
+    ["サイドランジ","legs",[]],
+    ["ノルディックハムカール","legs",["back"]],
+    ["リストカール","biceps",[]],
+    ["リバースリストカール","biceps",[]],
+    ["リバースカール","biceps",[]],
+    ["ファーマーズウォーク","back",["biceps","core"]],
+    ["ストレートアームプルダウン","back",["triceps"]],
+    ["ペンドレイロウ","back",["biceps"]],
+    ["ラックプル","back",[]],
+    ["ランドマインプレス","shoulder",["chest","triceps"]],
+    ["バイシクルクランチ","core",["legs"]],
+    ["サイドベント","core",["back"]],
+    ["ドラゴンフラッグ","core",["legs"]],
+    ["ホローボディホールド","core",["legs"]],
+    ["ピストルスクワット","legs",["core"]],
+    ["ジャンプスクワット","legs",[]],
+    ["ボックスジャンプ","legs",[]],
+    ["ダイヤモンドプッシュアップ","triceps",["chest","shoulder"]],
+    ["スラスター","legs",["shoulder","triceps"]],
+    ["ダンベルスナッチ","legs",["shoulder","back"]],
+    ["ゾットマンカール","biceps",[]],
+    ["デクラインプッシュアップ","chest",["shoulder","triceps"]],
+    ["ケーブルサイドレイズ","shoulder",["back","biceps"]],
+    ["シールロウ","back",["biceps"]],
+    ["ケーブルプルスルー","legs",["back"]],
+    ["バトルロープ","shoulder",["biceps","core"]],
+    ["スーパーマン","back",["legs"]],
+    ["Vシットアップ","core",["legs"]],
+    ["ウィンドシールドワイパー","core",["legs"]],
+    ["ベアクロール","core",["shoulder","legs"]],
+    ["シシースクワット","legs",["core"]],
+    ["シングルレッグルーマニアンデッドリフト","legs",["back"]],
+    ["スパイダーカール","biceps",["shoulder"]],
+    ["ベンチディップス","triceps",["shoulder","chest"]],
+    ["コサックスクワット","legs",[]],
+    ["オーバーヘッドスクワット","legs",["shoulder","back"]],
+    ["ジャンピングランジ","legs",[]],
+    ["グルートブリッジマーチ","legs",["core"]],
+    ["ジャックナイフ","core",["legs"]],
+    ["トウタッチクランチ","core",["legs"]],
+    ["コペンハーゲンプランク","legs",["core"]],
+    ["デクラインクランチ","core",["legs"]],
+    ["ランドマインロウ","back",["biceps"]],
+    ["ヒンズープッシュアップ","chest",["shoulder","triceps"]],
+    ["ケーブルキックバック","triceps",["shoulder","back"]],
+    ["ジェファーソンカール","back",["legs"]],
+  ];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.newEx2026V1=true; save();
+}
 
 //=========== 初期化 ===========
 function initRender(){
@@ -2678,6 +2744,7 @@ function initRender(){
   migrateMachines();
   migratePelvic();
   migratePilates();
+  migrateNewCards2026();
   applyTheme();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
   document.getElementById('rec-date').value=todayStr();
