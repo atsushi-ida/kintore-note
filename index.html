@@ -771,7 +771,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.18o";
+const APP_VERSION="2026.07.18q";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -2067,16 +2067,73 @@ function logsInPeriod(){
   return DB.logs.filter(l=>l.date>=cs);
 }
 const SEC_FACTOR=0.5; // 補助筋はフラクショナルセット 0.5 換算
+// 種目別・負荷係数（例外だけを持つ上書き表。無い種目は既定則 part=1.0, sec=各0.5 にフォールバック）2026-07-25
+const LOAD_OVERRIDE = {
+  // A. 可動域が狭い種目
+  "バーベルスクワット(クォーター)": {legs:0.5, core:0.25},
+  "バーベルスクワット(ハーフ)": {legs:0.75, core:0.25},
+  "ラックプル": {back:1.0, legs:0.25, biceps:0.25},
+  "フロアプレス": {chest:0.75, triceps:0.5, shoulder:0.25},
+  // B. 高負荷コンパウンドの補正・4番手追加
+  "デッドリフト(コンベンショナル)": {back:1.0, legs:0.75, core:0.25, biceps:0.25},
+  "デッドリフト(スモウ)": {back:1.0, legs:0.75, core:0.25, biceps:0.25},
+  "ルーマニアンデッドリフト": {legs:1.0, back:0.5, core:0.25, biceps:0.25},
+  "懸垂(チンニング)": {back:1.0, biceps:0.5, core:0.25},
+  "ラットプルダウン": {back:1.0, biceps:0.5},
+  "バーピー": {legs:1.0, chest:0.5, core:0.5, shoulder:0.25, triceps:0.25},
+  "スラスター": {legs:1.0, shoulder:0.5, triceps:0.5, core:0.25},
+  "マウンテンクライマー": {core:1.0, legs:0.5, shoulder:0.5, chest:0.25},
+  "ケトルベルスイング": {legs:1.0, back:0.5, core:0.25, shoulder:0.25},
+  "オーバーヘッドスクワット": {legs:1.0, shoulder:0.5, back:0.5, core:0.5},
+  "パワークリーン": {back:1.0, legs:0.75, shoulder:0.5, core:0.25},
+  "ファーマーズウォーク": {back:1.0, biceps:0.5, core:0.5, legs:0.25},
+  "レネゲードロウ": {back:1.0, core:0.5, biceps:0.5, chest:0.25, triceps:0.25},
+  // C. アイソメトリック
+  "プランク": {core:0.75, shoulder:0.25},
+  "サイドプランク": {core:0.75},
+  "ホローボディホールド": {core:0.75, legs:0.25},
+  "コペンハーゲンプランク": {legs:0.75, core:0.5},
+  // D. 呼吸・モビリティ・骨盤底系
+  "ドローイン": {core:0.25},
+  "肛門開閉(骨盤底筋)": {core:0.25},
+  "キャット&カウ": {back:0.25, core:0.25},
+  // E. ピラティス
+  "ハンドレッド": {core:0.75},
+  "ロールアップ": {core:0.75},
+  "レッグサークル": {core:0.75, legs:0.25},
+  "スイミング": {back:0.75, legs:0.25},
+  "スワン": {back:0.75, core:0.25},
+  "バードドッグ": {back:0.75, core:0.5},
+  "ショルダーブリッジ": {legs:0.75, core:0.25},
+  "クラムシェル": {legs:0.75},
+  "サイドキック": {legs:0.75, core:0.25},
+  "シングルレッグストレッチ": {core:0.75, legs:0.25},
+  "ダブルレッグストレッチ": {core:0.75},
+  "ロールオーバー": {core:0.75},
+  // F. 第5〜6弾（S41〜S46）の追補 2026-07-25
+  "カーフジャンプ": {legs:0.75},
+  "スケーターホップ": {legs:1.0, core:0.25},
+  "フロッグポンプ": {legs:0.75},
+  "トウズトゥバー": {core:1.0, back:0.5, biceps:0.25},
+  "ヒップアブダクション(サイドライイング)": {legs:0.75, core:0.25},
+  "パラレルバーディップス": {triceps:1.0, chest:0.75, shoulder:0.25},
+};
+function loadFactors(ex){
+  const o = LOAD_OVERRIDE[ex.name];
+  if(o) return o;
+  const f = {}; f[ex.part] = 1.0;
+  (ex.sec||[]).forEach(k=>{ if(f[k]===undefined) f[k] = SEC_FACTOR; });
+  return f;
+}
 function computeStats(logs){
   const vol={}, adjVol={}, sets={};
   PARTS.forEach(p=>{ vol[p.key]=0; adjVol[p.key]=0; sets[p.key]=0; });
   logs.forEach(l=>{
     const ex=DB.exercises.find(e=>e.id===l.exId); if(!ex) return;
-    const {primary, secondary}=targetsOf(ex);
+    const f=loadFactors(ex);
     l.sets.forEach(s=>{
       const v=s.weight*s.reps;
-      primary.forEach(k=>{ if(vol[k]!==undefined){ vol[k]+=v; sets[k]+=1; } });
-      secondary.forEach(k=>{ if(vol[k]!==undefined){ vol[k]+=v*SEC_FACTOR; sets[k]+=SEC_FACTOR; } });
+      Object.entries(f).forEach(([k,c])=>{ if(vol[k]!==undefined){ vol[k]+=v*c; sets[k]+=c; } });
     });
   });
   PARTS.forEach(p=>{ adjVol[p.key]=vol[p.key]/coefOf(p.key); });
@@ -2087,7 +2144,7 @@ function lerp(a,b,t){ const ah=a.match(/\w\w/g).map(x=>parseInt(x,16)), bh=b.mat
 function heatColor(t){ if(t<=0) return 'var(--m-none)'; return lerp('8bc7a3','1d6b41', Math.min(t,1)); }
 const BASIS={
   rate:{label:'目標達成率', note:'各部位の週セット数÷目標。重量の影響を受けず、放置部位を最も公平に検出できます。'},
-  sets:{label:'週セット数', note:'補助筋も0.5換算で加算。筋肥大の目安は週10〜20セット。'},
+  sets:{label:'週セット数', note:'関与筋は種目ごとの係数(1.0/0.75/0.5/0.25)で換算加算。筋肥大の目安は週10〜20セット。'},
   vol:{label:'補正ボリューム', note:'重量×回数×セットを部位係数で割って公平化。設定で係数を変更できます。'}
 };
 function metricVals(logs){
@@ -2209,7 +2266,7 @@ function renderDiagnosis(adjVol, sets, weeks){
   if(!low.length&&!over.length) html+=`<div class="flag good">${ic('circle-check-big')}<span>全部位、目標セット数に対してバランス良く取れています！</span></div>`;
   const sorted=[...PARTS].sort((a,b)=>rate[b.key]-rate[a.key]);
   html+=`<p class="note">達成率が高い：<b style="color:${sorted[0].color}">${sorted[0].name}</b> ／ 最も不足：<b style="color:${sorted[sorted.length-1].color}">${sorted[sorted.length-1].name}</b><br>
-    ※判定は「重量に左右されない週セット数÷目標」で行っています（補助筋も0.5換算で加算）。</p>`;
+    ※判定は「重量に左右されない週セット数÷目標」で行っています（関与筋は種目ごとの係数(1.0/0.75/0.5/0.25)で換算加算）。</p>`;
   box.innerHTML=html;
 }
 function drawRadar(adjVol, maxOverride){
@@ -2734,6 +2791,37 @@ function migrateNewCards2026(){ // S26〜S40の新種目59（2026-07 GPTカー�
   ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
   DB.settings.newEx2026V1=true; save();
 }
+function migrateNewCards2026b(){ // S41〜S46の新種目24（第5〜6弾）
+  if(DB.settings.newEx2026bV1) return;
+  const ADD=[
+    ["シュリンプスクワット","legs",[]],
+    ["フロッグポンプ","legs",[]],
+    ["スケーターホップ","legs",[]],
+    ["カーフジャンプ","legs",[]],
+    ["ボトムズアップケトルベルプレス","shoulder",["triceps","back"]],
+    ["ドラッグカール","biceps",[]],
+    ["ケーブルハンマーカール","biceps",[]],
+    ["テイトプレス","triceps",["chest","shoulder"]],
+    ["フロアプレス","chest",["triceps","shoulder"]],
+    ["レネゲードロウ","back",["core","biceps"]],
+    ["トウズトゥバー","core",["back"]],
+    ["グルートハムレイズ","legs",[]],
+    ["ジェファーソンスクワット","legs",[]],
+    ["ハックリフト","legs",["back"]],
+    ["リバースハイパー","legs",["back"]],
+    ["ドンキーカーフレイズ","legs",[]],
+    ["JMプレス","triceps",["chest","shoulder"]],
+    ["スコットプレス","shoulder",["triceps","core"]],
+    ["クロスボディハンマーカール","biceps",[]],
+    ["パラレルバーディップス","triceps",["chest","shoulder"]],
+    ["ストレートアームケーブルフライ","chest",["shoulder","biceps"]],
+    ["インクラインシュラッグ","back",["shoulder"]],
+    ["ヒップアブダクション(サイドライイング)","legs",["core"]],
+    ["アンイーブンプッシュアップ","chest",["triceps","core"]],
+  ];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.newEx2026bV1=true; save();
+}
 
 //=========== 初期化 ===========
 function initRender(){
@@ -2745,6 +2833,7 @@ function initRender(){
   migratePelvic();
   migratePilates();
   migrateNewCards2026();
+  migrateNewCards2026b();
   applyTheme();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
   document.getElementById('rec-date').value=todayStr();
