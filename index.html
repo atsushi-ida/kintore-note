@@ -771,7 +771,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.18q";
+const APP_VERSION="2026.07.18s";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -2117,6 +2117,15 @@ const LOAD_OVERRIDE = {
   "トウズトゥバー": {core:1.0, back:0.5, biceps:0.25},
   "ヒップアブダクション(サイドライイング)": {legs:0.75, core:0.25},
   "パラレルバーディップス": {triceps:1.0, chest:0.75, shoulder:0.25},
+  // G. 第7〜10弾（S47〜S58）の追補 2026-07-28
+  "ターキッシュゲットアップ": {shoulder:1.0, core:0.75, legs:0.5},
+  "ランドマインツイスト": {core:1.0, shoulder:0.25},
+  "ワンアームプッシュアップ": {chest:1.0, triceps:0.75, core:0.75},
+  "チンアップ(逆手懸垂)": {biceps:1.0, back:0.75},
+  "ヒップアダクションマシン": {legs:1.0, core:0.25},
+  "Lシット": {core:0.75, legs:0.5, triceps:0.5},
+  "ケーブルオーバーヘッドエクステンション": {triceps:1.0, shoulder:0.25, core:0.25},
+  "ケーブルワンハンドサイドレイズ": {shoulder:1.0, back:0.25, core:0.25},
 };
 function loadFactors(ex){
   const o = LOAD_OVERRIDE[ex.name];
@@ -2822,6 +2831,64 @@ function migrateNewCards2026b(){ // S41〜S46の新種目24（第5〜6弾）
   ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
   DB.settings.newEx2026bV1=true; save();
 }
+function migrateNewCards2026c(){ // リバースクランチ（第1弾の保留分・2026-07-25に取得）
+  if(DB.settings.newEx2026cV1) return;
+  const ADD=[["リバースクランチ","core",["legs"]]];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.newEx2026cV1=true; save();
+}
+function migrateNewCards2026d(){ // S47〜S58の新種目45（第7〜10弾・2026-07-28）
+  if(DB.settings.newEx2026dV1) return;
+  const ADD=[
+    ["ターキッシュゲットアップ","shoulder",["core","legs"]],
+    ["ケトルベルウィンドミル","core",["shoulder","legs"]],
+    ["ランドマインツイスト","core",["shoulder"]],
+    ["クラブウォーク","triceps",["legs","core"]],
+    ["スパインプレス","core",["shoulder","chest"]],
+    ["リバースペックデッキ","shoulder",["back"]],
+    ["ワンアームプッシュアップ","chest",["triceps","core"]],
+    ["ベアハグスクワット","legs",["core"]],
+    ["ヒップシフトスクワット","legs",[]],
+    ["スミスマシンショルダープレス","shoulder",["triceps","back"]],
+    ["マシンショルダープレス","shoulder",["triceps","chest"]],
+    ["ワイドグリップベンチプレス","chest",["shoulder","triceps"]],
+    ["マシンチェストプレス(片手)","chest",["triceps","core"]],
+    ["チンアップ(逆手懸垂)","biceps",["back"]],
+    ["スパインローイング","back",["biceps"]],
+    ["ペンドラムスクワット","legs",[]],
+    ["シーテッドカーフレイズマシン","legs",[]],
+    ["ケーブルリアデルトロウ","shoulder",["back","biceps"]],
+    ["ヒップアダクションマシン","legs",["core"]],
+    ["ダンベルZプレス","shoulder",["triceps","core"]],
+    ["ニートゥチェスト","core",["legs"]],
+    ["アーチャープッシュアップ","chest",["triceps","core"]],
+    ["Lシット","core",["legs","triceps"]],
+    ["ハンギングニーレイズ","core",["legs","back"]],
+    ["スーツケースキャリー","core",["back","biceps"]],
+    ["ベルトスクワット","legs",[]],
+    ["ヒップヒンジ","legs",["back"]],
+    ["ヒールエレベーテッドスクワット","legs",[]],
+    ["ステップダウン","legs",[]],
+    ["ケーブルオーバーヘッドエクステンション","triceps",["shoulder","core"]],
+    ["Yレイズ","shoulder",["back"]],
+    ["ケトルベルクリーン","back",["legs","biceps"]],
+    ["カーフプレス","legs",[]],
+    ["ワンハンドケーブルロウ","back",["biceps"]],
+    ["チェストサポーテッドロウ","back",["shoulder"]],
+    ["インクラインベンチロウ","back",["biceps"]],
+    ["マシンリアデルト","shoulder",["back"]],
+    ["ケーブルワンハンドサイドレイズ","shoulder",["back","core"]],
+    ["ケーブルストレートバーカール","biceps",[]],
+    ["ハーフニーリングプレス","shoulder",["triceps","core"]],
+    ["メディシンボールスラム","back",["core","shoulder"]],
+    ["ケーブルヒップエクステンション","legs",["back"]],
+    ["スタンディングアブダクション","legs",["back"]],
+    ["ワンレッグヒップリフト","legs",["core"]],
+    ["スミスマシンカーフレイズ","legs",[]],
+  ];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.newEx2026dV1=true; save();
+}
 
 //=========== 初期化 ===========
 function initRender(){
@@ -2834,6 +2901,8 @@ function initRender(){
   migratePilates();
   migrateNewCards2026();
   migrateNewCards2026b();
+  migrateNewCards2026c();
+  migrateNewCards2026d();
   applyTheme();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
   document.getElementById('rec-date').value=todayStr();
