@@ -262,7 +262,9 @@
   .backup-bar .bb-x:hover{opacity:1;}
   /* ---- lucide icons ---- */
   i[data-lucide]{display:inline-flex; width:1em; height:1em;}
-  svg.lucide{width:18px;height:18px;stroke-width:1.6;vertical-align:-.18em;flex:none;}
+  /* pointer-events:none＝クリックの当たり先を常に親ボタンにする。アイコンsvgはクリック中に差し替わることがあり、
+     押した要素が消えるとChromeがclickを合成しない（2026-08-01・実機の入力イベントログで確定した実バグ） */
+  svg.lucide{width:18px;height:18px;stroke-width:1.6;vertical-align:-.18em;flex:none;pointer-events:none;}
   .tabs button svg.lucide{width:21px;height:21px;vertical-align:0;}
   .card h2 svg.lucide{width:16px;height:16px;}
   header h1 svg.lucide{width:18px;height:18px;}
@@ -606,6 +608,8 @@
       <h2><i data-lucide="info"></i> 使い方</h2>
       <p class="muted">記録→分析で「ヒートマップ」「不足部位」「自己ベスト」が見られます。種目選択時の人体図は効きやすさを3段階で表示：<span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--mt-main);vertical-align:middle;margin:0 2px"></span>メイン（主働筋）／<span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--mt-sub);vertical-align:middle;margin:0 2px"></span>サブ（補助）／<span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--mt-inv);vertical-align:middle;margin:0 2px"></span>関与（安定など）。</p>
       <p class="muted mt" style="font-size:11px">バージョン: <b id="app-version"></b></p>
+      <button class="btn sec small mt" id="click-diag-btn" onclick="toggleClickDiag()">🩺 クリック診断を開始</button>
+      <p class="note">押しても反応しないボタンの調査用。ONにすると、画面のどこを押しても「何のイベントがどの部品に届いたか」が下に表示されます。</p>
     </div>
   </div>
 
@@ -783,7 +787,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.01f";
+const APP_VERSION="2026.08.01h";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -870,8 +874,52 @@ function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 //=========== アイコン（Lucide） ===========
 function ic(n, attrs){ return '<i data-lucide="'+n+'"'+(attrs?' '+attrs:'')+'></i>'; }
 let _icoT=null;
-function refreshIcons(){ if(!window.lucide) return; clearTimeout(_icoT); _icoT=setTimeout(function(){ try{ lucide.createIcons(); }catch(e){} }, 20); }
+function refreshIcons(){ if(!window.lucide) return; clearTimeout(_icoT); _icoT=setTimeout(function(){ try{
+  // 未変換の<i>があるときだけ変換する。変換済みsvgに残るdata-lucideは毎回剥がす＝
+  // createIconsが既存svgを再置換して「クリック中に要素が消える」のを根絶する（2026-08-01）
+  if(document.querySelector('i[data-lucide]')) lucide.createIcons();
+  document.querySelectorAll('svg[data-lucide]').forEach(function(s){ s.removeAttribute('data-lucide'); });
+}catch(e){} }, 20); }
 try{ new MutationObserver(function(){ refreshIcons(); }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+
+//=========== クリック診断（2026-08-01・「鉛筆が反応しない」調査用） ===========
+// ONの間、window捕捉段階で入力イベントを観測して画面に出す。パネルはpointer-events:noneで完全に無害。
+let clickDiagOn=false;
+const diagEvents=[];
+function diagPanel(){
+  let p=document.getElementById('click-diag-panel');
+  if(!p){
+    p=document.createElement('div'); p.id='click-diag-panel';
+    p.style.cssText='position:fixed;left:8px;bottom:96px;z-index:9999;background:rgba(20,24,30,.92);color:#9fe8b5;font:11px/1.6 Consolas,monospace;padding:8px 10px;border-radius:8px;pointer-events:none;max-width:92vw;white-space:pre-wrap;';
+    document.body.appendChild(p);
+  }
+  return p;
+}
+function diagLabel(el){
+  if(!el||!el.tagName) return '?';
+  let s=el.tagName.toLowerCase();
+  if(el.id) s+='#'+el.id;
+  const c=(typeof el.className==='string'?el.className:(el.className&&el.className.baseVal)||'');
+  if(c) s+='.'+c.trim().split(/\s+/).join('.');
+  const btn=el.closest&&el.closest('button');
+  if(btn&&btn!==el) s+=' (button'+(btn.className?'.'+btn.className.split(/\s+/).join('.'):'')+'内)';
+  return s.slice(0,70);
+}
+['pointerdown','pointerup','mousedown','mouseup','click'].forEach(t=>{
+  window.addEventListener(t,e=>{
+    if(!clickDiagOn) return;
+    diagEvents.push(`${t.padEnd(11)} @${Math.round(e.clientX)},${Math.round(e.clientY)} → ${diagLabel(e.target)}`);
+    while(diagEvents.length>8) diagEvents.shift();
+    diagPanel().textContent='🩺 直近の入力イベント（新しいものが下）\n'+diagEvents.join('\n');
+  },true); // capture=ページ内の誰よりも先に観測する
+});
+function toggleClickDiag(){
+  clickDiagOn=!clickDiagOn;
+  const b=document.getElementById('click-diag-btn');
+  if(b) b.textContent=clickDiagOn?'🩺 クリック診断を終了':'🩺 クリック診断を開始';
+  if(!clickDiagOn){ const p=document.getElementById('click-diag-panel'); if(p) p.remove(); diagEvents.length=0; }
+  else { diagPanel().textContent='🩺 診断ON。反応しないボタンを押してみてください。'; }
+}
 
 //=========== テーマ ===========
 function applyTheme(){ document.body.dataset.theme=DB.settings.theme; document.getElementById('theme-btn').innerHTML = DB.settings.theme==='dark'?ic('sun'):ic('moon'); refreshIcons(); }
