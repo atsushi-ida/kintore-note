@@ -600,8 +600,15 @@
       <div id="restore-wrap"></div>
       <button class="btn danger mt" onclick="wipeAll()">全データを削除</button>
       <p class="note" id="persist-status" style="margin-top:8px">ストレージ保護: 確認中…</p>
-      <p class="note">データはこの端末のブラウザ内に保存され、端末間では自動同期されません。<br>
-      <b>端末間の同期手順：</b>スマホで「JSONバックアップ」→共有シートで<b>Googleドライブに保存</b>。PCでドライブから開き「JSON読み込み」で取り込み（戻す時は逆）。<br>
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+      <h3 style="margin:0 0 6px;font-size:14px">☁️ 端末間の同期（GAS）</h3>
+      <label style="margin-top:0">同期URL</label>
+      <input type="text" id="sync-url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ここにGASのウェブアプリURLを貼り付け（末尾に ?token=… ）">
+      <div class="row mt"><button class="btn sec" onclick="syncNow()">今すぐ同期</button></div>
+      <p class="note" id="sync-status" style="margin-top:6px">未設定</p>
+      <p class="note">URLを入れると、起動時とアプリに戻ったときに自動で最新へ揃います（PC⇔スマホ）。設定手順は
+      <b>ドキュメント／README_同期セットアップ.md</b> に画面つきで書いてあります。URLはこの端末の中だけに保存されます。</p>
+      <p class="note">「JSONバックアップ／読み込み」は<b>保険と引っ越し用</b>として残しています（同期を使っていても、月に一度の書き出しはおすすめ）。<br>
       ※読み込むと現在のデータは上書きされます。共有シートが出ない端末ではダウンロード保存になります。</p>
     </div>
     <div class="card">
@@ -787,7 +794,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.01h";
+const APP_VERSION="2026.08.01j";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -797,7 +804,9 @@ function defaultDB(){
   return {
     exercises: DEFAULT_EXERCISES.map((e,i)=>({id:"d"+i, name:e[0], part:e[1], sec:(SECONDARY[e[0]]||[]).filter(k=>k!==e[1]), fav:false})),
     logs: [], bodyweight: [], goals: [], templates: [],
-    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner", lastBackupAt:null }
+    tomb: [],       // 削除の墓標（端末間同期用・2026-08-01i）。同期OFFでも記録する＝後からONにしても復活しない
+    syncMeta: {},   // {lastPushAt,lastPullAt}。表示用・常にローカル（マージ対象外）
+    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner", lastBackupAt:null, syncUrl:"" }
   };
 }
 function load(){
@@ -820,6 +829,10 @@ function load(){
       d.settings.goal = d.settings.goal || "hypertrophy";       // アドバイス機能：目的（既定=筋肥大）
       d.settings.kegelLevel = d.settings.kegelLevel || "beginner"; // ケーゲル：レベル（既定=初級）
       if(!('lastBackupAt' in d.settings)) d.settings.lastBackupAt = null; // バックアップ日：既存スキーマ非破壊で補完（2026-07-11d）
+      if(typeof d.settings.syncUrl !== 'string') d.settings.syncUrl = ""; // 端末間同期のURL（空=同期OFF・2026-08-01i）
+      // 端末間同期：既存スキーマ非破壊で補完（2026-08-01i）。tombは90日より古いものを刈る
+      d.tomb = Array.isArray(d.tomb) ? d.tomb.filter(t=>t && t.k && t.id!=null && (Date.now()-(+t.t||0))<90*86400000) : [];
+      d.syncMeta = (d.syncMeta && typeof d.syncMeta==='object' && !Array.isArray(d.syncMeta)) ? d.syncMeta : {};
       d.exercises.forEach(e=>{ if(!e.sec) e.sec=(SECONDARY[e.name]||[]).filter(k=>k!==e.part); });
       // 2026-08-01：idが欠けている／重複しているログを自己修復する。
       // idは編集・削除の唯一の手がかりなので、壊れていると鉛筆ボタンが黙って無反応になる。既存のidは変えない。
@@ -836,7 +849,9 @@ function load(){
   }
   return defaultDB();
 }
-function save(){
+// save(opts) — optsは省略可（既存の呼び出しは1つも変えなくてよい）。
+// opts.skipSync=true のとき同期push（デバウンス）を予約しない＝pull起因の保存でループしないための唯一の逃げ道。
+function save(opts){
   try{
     localStorage.setItem(LS, JSON.stringify(DB));
   }catch(e){
@@ -844,8 +859,23 @@ function save(){
     try{ toast('⚠️保存できませんでした（容量超過の可能性）。JSON書き出しで退避してください'); }catch(_){}
     console.error('save failed', e);
   }
+  // 同期push予約（syncUrl未設定なら schedulePush() は即returnする＝同期OFF時は完全に従来どおり）
+  if(!(opts && opts.skipSync)){ try{ schedulePush(); }catch(_){} }
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
+//--- 端末間同期の下地：変更時刻(mt)の刻印と削除の墓標(tomb) --------------------
+// mtはマージの唯一の根拠。刻印を忘れた経路は「相手の古い内容に負ける」ので、変更系は必ずここを通す。
+function stamp(o){ if(o && typeof o==='object') o.mt=Date.now(); return o; }
+function stampSettings(){ try{ DB.settings._mt=Date.now(); }catch(_){} }
+// 墓標。kは 'log'|'ex'|'bw'|'goal'|'tpl'。**exのidは種目名**（マージのキーが名前だから）
+function addTomb(k, id){
+  if(id==null) return;
+  try{
+    DB.tomb = Array.isArray(DB.tomb) ? DB.tomb : [];
+    DB.tomb = DB.tomb.filter(t=>!(t && t.k===k && t.id===id));
+    DB.tomb.push({k, id, t:Date.now()});
+  }catch(_){}
+}
 function partOf(k){ return PARTS.find(p=>p.key===k)||{name:"?",color:"#888"}; }
 function coefOf(k){ return DB.settings.coef[k] || 1; }
 function targetOf(k){ return DB.settings.targets[k] || 10; }
@@ -1237,6 +1267,7 @@ function addLogEntry(exId, sets, opts){
   const entry={id:uid(), date:opts.date||todayStr(), exId, sets};
   if(opts.rpe!=null && !isNaN(opts.rpe)) entry.rpe=opts.rpe;
   if(opts.memo) entry.memo=opts.memo;
+  stamp(entry);
   DB.logs.push(entry); save();
   return entry;
 }
@@ -1283,8 +1314,8 @@ function renderTodayLogs(){
   }).join('');
   sum.textContent=`${logs.length}種目 ・ ${ts}セット ・ ${fmt(tv)}kg`;
 }
-function delLog(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); save(); renderTodayLogs(); }
-function delLogHist(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); save(); renderHistory(); toast('削除しました'); }
+function delLog(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); addTomb('log',id); save(); renderTodayLogs(); }
+function delLogHist(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); addTomb('log',id); save(); renderHistory(); toast('削除しました'); }
 
 //=========== ログ編集モーダル ===========
 function editLog(id){
@@ -1321,6 +1352,7 @@ function saveEdit(id){
   l.sets=sets; l.date=document.getElementById('m-date').value||l.date;
   const rpe=parseInt(document.getElementById('m-rpe').value); l.rpe=isNaN(rpe)?undefined:rpe;
   const memo=document.getElementById('m-memo').value.trim(); l.memo=memo||undefined;
+  stamp(l);
   save(); closeModal(); renderTodayLogs(); toast('更新しました');
 }
 function openModal(html){ document.getElementById('modal').innerHTML=html; document.getElementById('modal-bg').classList.add('show'); }
@@ -1528,9 +1560,9 @@ function saveTemplateFromToday(){
   const dup=DB.templates.find(t=>t.name===name);
   if(dup){
     if(!confirm(`「${name}」は既にあります。上書きしますか？`)) return;
-    dup.exIds=exIds;
+    dup.exIds=exIds; stamp(dup);
   } else {
-    DB.templates.push({id:uid(), name, exIds});
+    DB.templates.push(stamp({id:uid(), name, exIds}));
   }
   save(); renderTemplates(); toast(`テンプレ「${name}」を保存しました（${exIds.length}種目）`);
 }
@@ -1539,12 +1571,12 @@ function renameTemplate(id){
   const name=(prompt('新しいテンプレート名', t.name) || '').trim();
   if(!name || name===t.name) return;
   if((DB.templates||[]).some(x=>x.id!==id && x.name===name)){ toast('同名のテンプレートが既にあります'); return; }
-  t.name=name; save(); renderTemplates(); toast('名前を変更しました');
+  t.name=name; stamp(t); save(); renderTemplates(); toast('名前を変更しました');
 }
 function deleteTemplate(id){
   const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
   if(!confirm(`テンプレ「${t.name}」を削除しますか？`)) return;
-  DB.templates=(DB.templates||[]).filter(x=>x.id!==id); save(); renderTemplates(); toast('削除しました');
+  DB.templates=(DB.templates||[]).filter(x=>x.id!==id); addTomb('tpl',id); save(); renderTemplates(); toast('削除しました');
 }
 // 筋力タブの1RM比ロジックを関数化（renderStrength と 機能B が共用）
 function benchRatios(data){ // data: [{key,rm,...}] rm>0 の配列（length>=2 前提）
@@ -1598,7 +1630,7 @@ function renderAdvice(){
   box.innerHTML=html; refreshIcons();
 }
 document.querySelectorAll('#goal-seg button').forEach(b=>{
-  b.onclick=()=>{ DB.settings.goal=b.dataset.g; save(); renderAdvice(); };
+  b.onclick=()=>{ DB.settings.goal=b.dataset.g; stampSettings(); save(); renderAdvice(); };
 });
 
 //=========== 機能D：ケーゲル（骨盤底筋）ガイド ===========
@@ -1650,7 +1682,7 @@ function renderKegelSetup(lvl){
   refreshIcons();
   drawStaminaChart(); // 持久目標のミニ推移グラフ
 }
-function setKegelLevel(k){ DB.settings.kegelLevel=k; save(); renderKegelSetup(k); }
+function setKegelLevel(k){ DB.settings.kegelLevel=k; stampSettings(); save(); renderKegelSetup(k); }
 function buildKegelPhases(prog){
   const phases=[];
   for(let s=0;s<prog.sets;s++){
@@ -1864,7 +1896,7 @@ function renderGoals(){
     const start=(g.startE1RM!=null?g.startE1RM:current);
     const pct=target>0?Math.min(current/target*100,100):0;
     const startPct=target>0?Math.min(start/target*100,100):0;
-    if(est.status==='done' && !g.done){ g.done=todayStr(); needSave=true; }
+    if(est.status==='done' && !g.done){ g.done=todayStr(); stamp(g); needSave=true; }
     const repNote=(g.targetReps>1)?` <span class="muted">(${g.targetW}kg×${g.targetReps}→1RM換算)</span>`:'';
     const pace=(current>0 && est.status!=='done')?`<div class="goal-pace">${weekPaceText(current)}</div>`:'';
     return `<div class="goal-item">
@@ -1906,7 +1938,7 @@ function addGoal(){
   const ex=DB.exercises.find(e=>e.name===exName);
   let startE1RM=0;
   if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, epley(s.weight,s.reps)); })); }
-  DB.goals.push({id:uid(), type:'lift', exName, targetW:w, targetReps:r, created:todayStr(), done:null, startE1RM});
+  DB.goals.push(stamp({id:uid(), type:'lift', exName, targetW:w, targetReps:r, created:todayStr(), done:null, startE1RM}));
   save();
   document.getElementById('goal-add').innerHTML='';
   renderGoals();
@@ -1917,10 +1949,10 @@ function addIntermediateGoal(exName, w){
   const ex=DB.exercises.find(e=>e.name===exName);
   let startE1RM=0;
   if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, epley(s.weight,s.reps)); })); }
-  DB.goals.push({id:uid(), type:'lift', exName, targetW:w, targetReps:1, created:todayStr(), done:null, startE1RM});
+  DB.goals.push(stamp({id:uid(), type:'lift', exName, targetW:w, targetReps:1, created:todayStr(), done:null, startE1RM}));
   save(); renderGoals(); toast('中間目標を追加しました');
 }
-function delGoal(id){ if(!confirm('この目標を削除しますか？')) return; DB.goals=(DB.goals||[]).filter(g=>g.id!==id); save(); renderGoals(); }
+function delGoal(id){ if(!confirm('この目標を削除しますか？')) return; DB.goals=(DB.goals||[]).filter(g=>g.id!==id); addTomb('goal',id); save(); renderGoals(); }
 
 // --- E2：持久目標（ケーゲルモーダル内のみ・メイン画面には出さない） ---
 function staminaGoal(){ return (DB.goals||[]).find(g=>g.type==='stamina')||null; }
@@ -1981,8 +2013,8 @@ function setStaminaTarget(){
   if(!(v>0)){ toast('目標(分)を入力してください'); return; }
   DB.goals=DB.goals||[];
   let g=staminaGoal();
-  if(!g){ DB.goals.push({id:uid(), type:'stamina', targetMin:v, created:todayStr(), done:null, records:[]}); }
-  else g.targetMin=v;
+  if(!g){ DB.goals.push(stamp({id:uid(), type:'stamina', targetMin:v, created:todayStr(), done:null, records:[]})); }
+  else { g.targetMin=v; stamp(g); }
   save(); renderKegelSetup(DB.settings.kegelLevel||'beginner');
 }
 function addStaminaRecord(){
@@ -1992,6 +2024,7 @@ function addStaminaRecord(){
   if(!(min>=0)){ toast('分を入力してください'); return; }
   g.records=g.records||[]; g.records.push({date, min:Math.round(min*10)/10});
   g.records.sort((a,b)=>a.date<b.date?-1:1);
+  stamp(g);
   save(); renderKegelSetup(DB.settings.kegelLevel||'beginner');
 }
 function drawStaminaChart(){
@@ -2070,15 +2103,18 @@ function addExercise(){
   const part=document.getElementById('ne-part').value;
   if(!name){ toast('種目名を入力'); return; }
   const sec=[...document.querySelectorAll('#ne-sec .pill.on')].map(e=>e.dataset.k).filter(k=>k!==part);
-  DB.exercises.push({id:uid(), name, part, sec, fav:false}); save();
+  DB.exercises.push(stamp({id:uid(), name, part, sec, fav:false})); save();
   document.getElementById('ne-name').value='';
   document.querySelectorAll('#ne-sec .pill.on').forEach(e=>e.classList.remove('on'));
   renderExList(); fillExSelect(); toast('追加しました');
 }
-function toggleFav(id){ const e=DB.exercises.find(x=>x.id===id); if(e){ e.fav=!e.fav; save(); renderExList(); fillExSelect(); } }
+function toggleFav(id){ const e=DB.exercises.find(x=>x.id===id); if(e){ e.fav=!e.fav; stamp(e); save(); renderExList(); fillExSelect(); } }
 function delExercise(id){
   if(!confirm('この種目を削除しますか？（過去の記録は残ります）')) return;
-  DB.exercises=DB.exercises.filter(e=>e.id!==id); save(); renderExList(); fillExSelect();
+  const e=DB.exercises.find(x=>x.id===id);
+  DB.exercises=DB.exercises.filter(x=>x.id!==id);
+  if(e) addTomb('ex', e.name); // 種目のマージキーは名前＝墓標も名前で持つ
+  save(); renderExList(); fillExSelect();
 }
 function editExercise(id){
   const e=DB.exercises.find(x=>x.id===id); if(!e) return;
@@ -2093,9 +2129,14 @@ function editExercise(id){
 }
 function saveExEdit(id){
   const e=DB.exercises.find(x=>x.id===id); if(!e) return;
+  const oldName=e.name;
   e.name=document.getElementById('ee-name').value.trim()||e.name;
   e.part=document.getElementById('ee-part').value;
   e.sec=[...document.querySelectorAll('#ee-sec .pill.on')].map(x=>x.dataset.k).filter(k=>k!==e.part);
+  stamp(e);
+  // 種目のマージキーは名前。改名は「旧名を消して新名を作る」と等価なので旧名に墓標を立てる
+  // （立てないと相手端末に旧名のカードが残り、同じidが二重に現れる）
+  if(oldName && oldName!==e.name) addTomb('ex', oldName);
   save(); closeModal(); renderExList(); fillExSelect(); toast('更新しました');
 }
 // 種目一覧の部位アコーディオン（2026-08-01）。開閉はメモリのみに持つ＝リロードすると全部閉じる。
@@ -2468,7 +2509,7 @@ function saveBW(){
   const rec={date,kg};
   if(!isNaN(fat)&&fat>0) rec.fat=fat;
   if(!isNaN(muscle)&&muscle>0) rec.muscle=muscle;
-  DB.bodyweight=DB.bodyweight.filter(b=>b.date!==date); DB.bodyweight.push(rec);
+  DB.bodyweight=DB.bodyweight.filter(b=>b.date!==date); DB.bodyweight.push(stamp(rec));
   DB.bodyweight.sort((a,b)=>a.date<b.date?-1:1); save();
   document.getElementById('bw-kg').value=''; document.getElementById('bw-fat').value=''; document.getElementById('bw-muscle').value='';
   renderWeight(); toast('記録しました');
@@ -2497,7 +2538,7 @@ function renderBodyIndex(){
 }
 function renderWeight(){
   renderBodyIndex();
-  document.querySelectorAll('#phase-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.p===(DB.settings.phase||'maintain')); b.onclick=()=>{ DB.settings.phase=b.dataset.p; save(); renderWeight(); }; });
+  document.querySelectorAll('#phase-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.p===(DB.settings.phase||'maintain')); b.onclick=()=>{ DB.settings.phase=b.dataset.p; stampSettings(); save(); renderWeight(); }; });
   document.querySelectorAll('#bw-metric-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.m===bwMetric); b.onclick=()=>{ bwMetric=b.dataset.m; renderWeight(); }; });
   const ph=PHASES[DB.settings.phase||'maintain'];
   document.getElementById('bw-phase-label').innerHTML=`<span style="color:${ph.c}">●</span> ${ph.n}`;
@@ -2521,7 +2562,7 @@ function renderWeight(){
     '<table><tr><th>日付</th><th>体重</th><th>体脂肪</th><th>筋肉量</th><th></th></tr>'+bw.slice().reverse().slice(0,20).map(b=>
       `<tr><td>${b.date}</td><td>${b.kg}kg</td><td class="muted">${b.fat!=null?b.fat+'%':'-'}</td><td class="muted">${b.muscle!=null?b.muscle+'kg':'-'}</td><td><button class="x" onclick="delBW('${b.date}')">${ic('x')}</button></td></tr>`).join('')+'</table>';
 }
-function delBW(date){ DB.bodyweight=DB.bodyweight.filter(b=>b.date!==date); save(); renderWeight(); }
+function delBW(date){ DB.bodyweight=DB.bodyweight.filter(b=>b.date!==date); addTomb('bw',date); save(); renderWeight(); }
 
 //=========== 筋力（種目間バランス＋体重比レベル） ===========
 const BENCH_RATIO={ ohp:0.62, bench:1.0, row:0.75, squat:1.35, deadlift:1.55 };
@@ -2589,12 +2630,12 @@ function renderStrength(){
   document.getElementById('st-sex').value=DB.settings.sex;
   document.getElementById('st-age').value=DB.settings.age||'';
   const bwInput=document.getElementById('st-bw'); if(document.activeElement!==bwInput) bwInput.value=latestBW()||'';
-  document.getElementById('st-sex').onchange=e=>{ DB.settings.sex=e.target.value; save(); renderStrength(); };
-  document.getElementById('st-age').onchange=e=>{ DB.settings.age=parseInt(e.target.value)||0; save(); renderStrength(); };
+  document.getElementById('st-sex').onchange=e=>{ DB.settings.sex=e.target.value; stampSettings(); save(); renderStrength(); };
+  document.getElementById('st-age').onchange=e=>{ DB.settings.age=parseInt(e.target.value)||0; stampSettings(); save(); renderStrength(); };
   document.getElementById('st-height').value=DB.settings.height||'';
   document.getElementById('st-height').onchange=e=>{ const v=parseFloat(e.target.value);
-    DB.settings.height=(v>0?v:0); save(); renderBodyIndex(); }; // 身長はBMI/FFMI専用＝筋力レベル判定には使わない
-  bwInput.onchange=e=>{ const kg=parseFloat(e.target.value); if(kg>0){ const d=todayStr(); DB.bodyweight=DB.bodyweight.filter(b=>b.date!==d); DB.bodyweight.push({date:d,kg}); DB.bodyweight.sort((a,b)=>a.date<b.date?-1:1); save(); } renderStrength(); };
+    DB.settings.height=(v>0?v:0); stampSettings(); save(); renderBodyIndex(); }; // 身長はBMI/FFMI専用＝筋力レベル判定には使わない
+  bwInput.onchange=e=>{ const kg=parseFloat(e.target.value); if(kg>0){ const d=todayStr(); DB.bodyweight=DB.bodyweight.filter(b=>b.date!==d); DB.bodyweight.push(stamp({date:d,kg})); DB.bodyweight.sort((a,b)=>a.date<b.date?-1:1); save(); } renderStrength(); };
   document.querySelectorAll('#st-basis-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.b===curStBasis); b.onclick=()=>{ curStBasis=b.dataset.b; renderStrength(); }; });
   const std=STD[DB.settings.sex], age=DB.settings.age||0, ageF=ageFactor(age), bw=latestBW();
   const basisName= curStBasis==='general'?'一般成人の中で':'筋トレ実施者の中で';
@@ -2649,11 +2690,15 @@ function renderStrength(){
 function renderSettings(){
   document.getElementById('target-edit').innerHTML=PARTS.map(p=>`<div class="row mb" style="align-items:center;gap:8px">
     <label style="margin:0;flex:1;color:${p.color};font-weight:700">${p.name}</label>
-    <input type="number" style="flex:0 0 90px" value="${targetOf(p.key)}" onchange="DB.settings.targets['${p.key}']=parseFloat(this.value)||0;save()"> <span class="muted">セット/週</span></div>`).join('');
+    <input type="number" style="flex:0 0 90px" value="${targetOf(p.key)}" onchange="setPartTarget('${p.key}', this.value)"> <span class="muted">セット/週</span></div>`).join('');
   document.getElementById('coef-edit').innerHTML=PARTS.map(p=>`<div class="row mb" style="align-items:center;gap:8px">
     <label style="margin:0;flex:1;color:${p.color};font-weight:700">${p.name}</label>
-    <input type="number" step="0.1" style="flex:0 0 90px" value="${coefOf(p.key)}" onchange="DB.settings.coef['${p.key}']=parseFloat(this.value)||1;save()"></div>`).join('');
+    <input type="number" step="0.1" style="flex:0 0 90px" value="${coefOf(p.key)}" onchange="setPartCoef('${p.key}', this.value)"></div>`).join('');
+  renderSyncUI();
 }
+// 週目標セット数／バランス補正係数の更新（旧＝インライン式。同期のため _mt 刻印を挟むので関数化した）
+function setPartTarget(k, v){ DB.settings.targets[k]=parseFloat(v)||0; stampSettings(); save(); }
+function setPartCoef(k, v){ DB.settings.coef[k]=parseFloat(v)||1; stampSettings(); save(); }
 
 //=========== 入出力 ===========
 //=========== F-A：ストレージ永続化・バックアップ日 ===========
@@ -2998,6 +3043,358 @@ function migrateNewCards2026d(){ // S47〜S58の新種目45（第7〜10弾・202
   DB.settings.newEx2026dV1=true; save();
 }
 
+//=========== 端末間の同期（GAS方式・2026-08-01i） ===========
+// 設計: ドキュメント/設計書_同期_2026-08-01.md ／ サーバ側: ドキュメント/GAS同期コード.gs.txt
+// 絶対条件: ①syncUrl未設定なら挙動は従来どおり ②URL/トークンはコードに書かない（設定タブから入力）
+//           ③マージでデータを消さない（削除は墓標tombで明示されたときだけ）
+const SYNC_DEV_KEY='kintore_sync_dev';   // 端末IDはDBの外＝同期させない
+const SYNC_TIMEOUT_MS=30000; // 実GASはコールドスタート＋シートI/Oで7秒超えが普通（2026-08-01実測7.3s）。8秒では「書けたのに失敗表示」になる
+const SYNC_PUSH_DEBOUNCE_MS=4000;
+const SYNC_PULL_MIN_INTERVAL_MS=60000;   // 復帰時pullの最短間隔
+var _syncPushTimer=null, _syncBusy=false, _syncLastPullAt=0, _syncBootPullDone=false;
+// 起動時pullが終わるまでpushは出さない（新しい端末の空データを先に送りつけて最新行を上書きしないため）
+var _syncBootPending=false, _syncPushWanted=false;
+
+function syncDevId(){
+  try{
+    let d=localStorage.getItem(SYNC_DEV_KEY);
+    if(!d){ d=uid()+uid(); localStorage.setItem(SYNC_DEV_KEY,d); }
+    return d;
+  }catch(_){ return 'nodev'; }
+}
+function syncUrlOf(){
+  const u=DB && DB.settings && DB.settings.syncUrl;
+  return (typeof u==='string')? u.trim() : '';
+}
+function syncEnabled(){ return syncUrlOf().length>0; }
+function syncEndpoint(){
+  const u=syncUrlOf();
+  return u + (u.indexOf('?')>=0?'&':'?') + 'dev=' + encodeURIComponent(syncDevId());
+}
+// 30秒でタイムアウトするfetch（AbortController。失敗はすべて呼び出し側でcatchする）
+async function syncFetch(url, opts){
+  const ac=(typeof AbortController!=='undefined')? new AbortController() : null;
+  const t=ac? setTimeout(()=>ac.abort(), SYNC_TIMEOUT_MS) : null;
+  try{
+    return await fetch(url, Object.assign({}, opts, ac?{signal:ac.signal}:{}));
+  } finally { if(t) clearTimeout(t); }
+}
+
+//--- マージ（純粋関数：DOM・localStorage・DBグローバルに一切触らない）--------------
+// mergeDB(local, remote) → {db, added:{...}, total, changed} ／ remoteが壊れていたら null（＝マージ中止）
+function mergeDB(local, remote){
+  const isArr=Array.isArray;
+  const isObj=o=>o && typeof o==='object' && !isArr(o);
+  // --- スキーマ検査。少しでも怪しければ null を返して現状維持（空データで上書きしない）---
+  if(!isObj(remote)) return null;
+  if(!isArr(remote.exercises) || !isArr(remote.logs)) return null;
+  if(remote.bodyweight!=null && !isArr(remote.bodyweight)) return null;
+  if(remote.goals!=null && !isArr(remote.goals)) return null;
+  if(remote.templates!=null && !isArr(remote.templates)) return null;
+  if(remote.tomb!=null && !isArr(remote.tomb)) return null;
+  if(remote.settings!=null && !isObj(remote.settings)) return null;
+
+  const L=isObj(local)?local:{};
+  const arr=(o,k)=> isArr(o[k])? o[k] : [];
+  const lEx=arr(L,'exercises'), rEx=arr(remote,'exercises');
+  const lLog=arr(L,'logs'),     rLog=arr(remote,'logs');
+  const lBw=arr(L,'bodyweight'),rBw=arr(remote,'bodyweight');
+  const lGo=arr(L,'goals'),     rGo=arr(remote,'goals');
+  const lTp=arr(L,'templates'), rTp=arr(remote,'templates');
+  const lTb=arr(L,'tomb'),      rTb=arr(remote,'tomb');
+  const lS=isObj(L.settings)?L.settings:{}, rS=isObj(remote.settings)?remote.settings:{};
+
+  const now=Date.now(), TOMB_TTL=90*86400000;
+  const mtOf=o=>(o && typeof o.mt==='number' && isFinite(o.mt))? o.mt : 0;   // mt無し＝0（相手のmt付きが勝つ）
+  const clone=o=>JSON.parse(JSON.stringify(o));
+
+  // --- 1) 墓標を先に統合（k+id の和集合・同キーは新しいt・90日で刈る）---
+  const tombMap=new Map();
+  const tKey=(k,id)=>k+'\x00'+String(id);
+  lTb.concat(rTb).forEach(t=>{
+    if(!t || !t.k || t.id==null) return;
+    const tt=+t.t||0;
+    if(now-tt >= TOMB_TTL) return;
+    const key=tKey(t.k,t.id);
+    if(!tombMap.has(key) || tombMap.get(key)<tt) tombMap.set(key,tt);
+  });
+  const tombT=(k,id)=> tombMap.has(tKey(k,id))? tombMap.get(tKey(k,id)) : -1;
+  const buried=(k,id,rec)=> tombT(k,id) > mtOf(rec);   // 墓標のほうが新しければ削除が勝つ
+
+  // --- 2) 種目：キーは**名前**。同名はmt大が勝つが id はローカル側を維持する ---
+  const exOrder=[], exByName=new Map();
+  lEx.forEach(e=>{
+    if(!isObj(e) || e.name==null) return;
+    if(exByName.has(e.name)) return;                 // ローカル内の同名重複は先勝ち
+    const c=clone(e); c._local=true;
+    exByName.set(e.name, c); exOrder.push(e.name);
+  });
+  const idMap={};   // remoteのexId → こちらのexId（remote由来logsのexIdをremapする表）
+  rEx.forEach(e=>{
+    if(!isObj(e) || e.name==null) return;
+    const cur=exByName.get(e.name);
+    if(!cur){
+      const c=clone(e); c._local=false;
+      exByName.set(e.name, c); exOrder.push(e.name);
+    } else {
+      if(cur.id!==e.id && e.id!=null) idMap[e.id]=cur.id;
+      if(mtOf(e)>mtOf(cur)){
+        const c=clone(e); c.id=cur.id; c._local=cur._local;   // 中身は新しい方・idはローカル維持
+        exByName.set(e.name, c);
+      }
+    }
+  });
+  // 墓標で消えた種目を落とす（改名の伝播もここで効く）
+  let exList=exOrder.map(n=>exByName.get(n)).filter(e=>e && !buried('ex', e.name, e));
+  // id衝突の解消。ローカル由来のidは絶対に変えない（ローカルlogsが迷子になるため）
+  const usedIds=new Set();
+  exList.filter(e=>e._local).forEach(e=>{ if(e.id!=null) usedIds.add(e.id); });
+  let seq=0;
+  const freshId=()=>{ let id; do{ id='mx'+(++seq); }while(usedIds.has(id)); usedIds.add(id); return id; };
+  exList.forEach(e=>{
+    if(e._local) return;
+    if(e.id==null || usedIds.has(e.id)){
+      const old=e.id; e.id=freshId();
+      if(old!=null) idMap[old]=e.id;
+    } else { usedIds.add(e.id); }
+  });
+  exList.forEach(e=>{ delete e._local; });
+  const remapEx=id=> (Object.prototype.hasOwnProperty.call(idMap,id)? idMap[id] : id);
+
+  // --- 3) ログ：id和集合・同idはmt大。remote由来は必ずexIdをremapしてから取り込む ---
+  const logOrder=[], logById=new Map();
+  lLog.forEach(l=>{ if(!isObj(l)||l.id==null||logById.has(l.id)) return; logById.set(l.id, clone(l)); logOrder.push(l.id); });
+  rLog.forEach(l=>{
+    if(!isObj(l)||l.id==null) return;
+    const c=clone(l); if(c.exId!=null) c.exId=remapEx(c.exId);
+    const cur=logById.get(l.id);
+    if(!cur){ logById.set(l.id,c); logOrder.push(l.id); }
+    else if(mtOf(c)>mtOf(cur)) logById.set(l.id,c);
+  });
+  const logs=logOrder.map(id=>logById.get(id)).filter(l=>!buried('log', l.id, l));
+
+  // --- 4) 体重：dateキー ---
+  const bwOrder=[], bwByDate=new Map();
+  lBw.forEach(b=>{ if(!isObj(b)||b.date==null||bwByDate.has(b.date)) return; bwByDate.set(b.date, clone(b)); bwOrder.push(b.date); });
+  rBw.forEach(b=>{
+    if(!isObj(b)||b.date==null) return;
+    const cur=bwByDate.get(b.date);
+    if(!cur){ bwByDate.set(b.date, clone(b)); bwOrder.push(b.date); }
+    else if(mtOf(b)>mtOf(cur)) bwByDate.set(b.date, clone(b));
+  });
+  const bodyweight=bwOrder.map(d=>bwByDate.get(d)).filter(b=>!buried('bw', b.date, b))
+    .sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
+
+  // --- 5) 目標／テンプレ：idキー（中身は丸ごと差し替え） ---
+  const byId=(lArr,rArr,tk)=>{
+    const order=[], map=new Map();
+    lArr.forEach(o=>{ if(!isObj(o)||o.id==null||map.has(o.id)) return; map.set(o.id, clone(o)); order.push(o.id); });
+    rArr.forEach(o=>{
+      if(!isObj(o)||o.id==null) return;
+      const cur=map.get(o.id);
+      if(!cur){ map.set(o.id, clone(o)); order.push(o.id); }
+      else if(mtOf(o)>mtOf(cur)) map.set(o.id, clone(o));
+    });
+    return order.map(id=>map.get(id)).filter(o=>!buried(tk, o.id, o));
+  };
+  const goals=byId(lGo,rGo,'goal');
+  const templates=byId(lTp,rTp,'tpl');
+
+  // --- 6) 設定：_mtが新しい側を基礎に。theme/syncUrlは常にローカル・移行フラグはOR・lastBackupAtはmax ---
+  const num=v=>(typeof v==='number'&&isFinite(v))?v:0;
+  const remoteWins=num(rS._mt)>num(lS._mt);
+  const base=remoteWins?rS:lS, other=remoteWins?lS:rS;
+  const has=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+  const settings=clone(base);
+  // 「元々そのキーが無かったなら足さない」＝何も変わっていないpullで changed=true になるのを防ぐ
+  if(has(lS,'targets')||has(rS,'targets')) settings.targets=Object.assign({}, other.targets||{}, base.targets||{});
+  if(has(lS,'coef')||has(rS,'coef'))       settings.coef   =Object.assign({}, other.coef||{},    base.coef||{});
+  if(has(lS,'theme')||has(rS,'theme'))     settings.theme  = lS.theme || settings.theme || 'light';  // テーマは端末の好み
+  if(has(lS,'syncUrl')||has(rS,'syncUrl')) settings.syncUrl= (typeof lS.syncUrl==='string')? lS.syncUrl : '';  // URLは絶対にリモートから拾わない
+  Object.keys(lS).concat(Object.keys(rS)).forEach(k=>{
+    if(/V1$/.test(k) || k==='_lightMigrated'){ if(lS[k]===true || rS[k]===true) settings[k]=true; }
+  });
+  if(has(lS,'lastBackupAt')||has(rS,'lastBackupAt')){
+    const lb=lS.lastBackupAt||null, rb=rS.lastBackupAt||null;
+    settings.lastBackupAt = (lb&&rb)? (lb>rb?lb:rb) : (lb||rb||null);
+  }
+  if(num(lS._mt)||num(rS._mt)) settings._mt=Math.max(num(lS._mt), num(rS._mt));
+
+  const tomb=[];
+  tombMap.forEach((t,key)=>{ const i=key.indexOf('\x00'); tomb.push({k:key.slice(0,i), id:key.slice(i+1), t}); });
+
+  const db={
+    exercises:exList, logs, bodyweight, goals, templates, tomb,
+    syncMeta: isObj(L.syncMeta)? clone(L.syncMeta) : {},   // 常にローカル
+    settings
+  };
+  // 取り込んだ「増分」（ローカルに無かったものの数）。toastの件数表示に使う
+  const had=(a,f)=>{ const s=new Set(); a.forEach(o=>{ if(isObj(o)) s.add(f(o)); }); return s; };
+  const hEx=had(lEx,o=>o.name), hLog=had(lLog,o=>o.id), hBw=had(lBw,o=>o.date), hGo=had(lGo,o=>o.id), hTp=had(lTp,o=>o.id);
+  const added={
+    exercises: exList.filter(o=>!hEx.has(o.name)).length,
+    logs:      logs.filter(o=>!hLog.has(o.id)).length,
+    bodyweight:bodyweight.filter(o=>!hBw.has(o.date)).length,
+    goals:     goals.filter(o=>!hGo.has(o.id)).length,
+    templates: templates.filter(o=>!hTp.has(o.id)).length
+  };
+  const total=added.exercises+added.logs+added.bodyweight+added.goals+added.templates;
+  // 「増分0でも中身は変わった」場合（編集・削除の取り込み）を拾う。
+  // キー順の違いを変化と誤判定しないよう、比較用にはキーを並べ替えた文字列を使う
+  const stable=v=>{
+    if(Array.isArray(v)) return '['+v.map(stable).join(',')+']';
+    if(v && typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';
+    return JSON.stringify(v===undefined?null:v);
+  };
+  const sig=o=>stable([o.exercises,o.logs,o.bodyweight,o.goals,o.templates,o.tomb,o.settings]);
+  const changed = sig(db)!==sig({exercises:lEx,logs:lLog,bodyweight:lBw,goals:lGo,templates:lTp,tomb:lTb,settings:lS});
+  return {db, added, total, changed};
+}
+
+//--- 通信 ---------------------------------------------------------------------
+async function syncPull(opts){
+  opts=opts||{};
+  if(!syncEnabled()) return {ok:false, reason:'off'};
+  if(_syncBusy) return {ok:false, reason:'busy'};
+  _syncBusy=true;
+  try{
+    const res=await syncFetch(syncEndpoint(), {method:'GET'});
+    const j=await res.json();
+    if(!j || j.ok!==true) throw new Error(j && j.error ? String(j.error) : 'bad_response');
+    _syncLastPullAt=Date.now();
+    if(j.data==null || j.data===''){                       // まだ誰も送っていない
+      syncMark('lastPullAt'); return {ok:true, total:0, changed:false, empty:true};
+    }
+    let remote; try{ remote=JSON.parse(j.data); }catch(_){ throw new Error('parse'); }
+    // マージ直前にローカルの現状を退避（1世代・上書き）＝事故時の脱出口
+    try{ localStorage.setItem(LS+':presync', JSON.stringify(DB)); }catch(_){}
+    const m=mergeDB(DB, remote);
+    if(!m) throw new Error('schema');                      // 壊れたリモートは無視＝現状維持
+    if(m.changed){
+      DB.exercises=m.db.exercises; DB.logs=m.db.logs; DB.bodyweight=m.db.bodyweight;
+      DB.goals=m.db.goals; DB.templates=m.db.templates; DB.tomb=m.db.tomb; DB.settings=m.db.settings;
+    }
+    syncMark('lastPullAt');                                 // save(skipSync)込み＝pull起因でpushしない
+    if(m.changed){ syncRerender(); }
+    if(m.total>0) toast('同期: '+m.total+'件を取り込みました');
+    else if(m.changed && opts.manual) toast('同期: 最新の内容を取り込みました');
+    return {ok:true, total:m.total, changed:m.changed};
+  }catch(e){
+    console.warn('syncPull failed', e);
+    syncStatusError(e);
+    return {ok:false, reason:String(e && e.message || e)};
+  } finally { _syncBusy=false; }
+}
+async function syncPush(){
+  if(!syncEnabled()) return {ok:false, reason:'off'};
+  try{
+    // syncUrl（＝トークン入り）はリモートに置かない。マージ側も常にローカルを使うので落として損はない
+    const payload=Object.assign({}, DB);
+    payload.settings=Object.assign({}, DB.settings); delete payload.settings.syncUrl;
+    delete payload.syncMeta;
+    const res=await syncFetch(syncEndpoint(), {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},   // GASはOPTIONSに応答しない＝simple requestで送る
+      body: JSON.stringify(payload)
+    });
+    const j=await res.json();
+    if(!j || j.ok!==true) throw new Error(j && j.error ? String(j.error) : 'bad_response');
+    syncMark('lastPushAt');
+    return {ok:true};
+  }catch(e){
+    console.warn('syncPush failed', e);
+    syncStatusError(e);
+    return {ok:false, reason:String(e && e.message || e)};
+  }
+}
+function schedulePush(){
+  if(!syncEnabled()) return;               // 同期OFFなら何も起きない＝従来どおり
+  if(_syncBootPending){ _syncPushWanted=true; return; }   // 起動pullの完了待ち
+  clearTimeout(_syncPushTimer);
+  _syncPushTimer=setTimeout(()=>{ syncPush().catch(()=>{}); }, SYNC_PUSH_DEBOUNCE_MS);
+}
+function syncBootDone(){
+  _syncBootPending=false;
+  if(_syncPushWanted){ _syncPushWanted=false; schedulePush(); }
+}
+function syncMark(key){
+  try{
+    DB.syncMeta=DB.syncMeta||{};
+    DB.syncMeta[key]=Date.now();
+    save({skipSync:true});                 // ← pushを予約しない（ループ防止の要）
+  }catch(_){}
+  renderSyncStatus();
+}
+function syncStatusError(e){
+  const el=document.getElementById('sync-status'); if(!el) return;
+  el.textContent='同期エラー: '+String((e&&e.message)||e)+'（データは変更していません）';
+}
+
+//--- UI ----------------------------------------------------------------------
+function renderSyncUI(){
+  const inp=document.getElementById('sync-url'); if(!inp) return;
+  inp.value=syncUrlOf();
+  inp.onchange=()=>{ setSyncUrl(inp.value); };
+  renderSyncStatus();
+}
+function setSyncUrl(v){
+  const s=String(v||'').trim();
+  if(s===syncUrlOf()) return false;
+  DB.settings.syncUrl=s;
+  stampSettings();
+  save({skipSync:true});                   // URL保存だけで送信はしない（押したときに動く）
+  renderSyncStatus();
+  return true;
+}
+function hhmm(ts){
+  if(!ts) return '—';
+  const d=new Date(ts);
+  return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+}
+function renderSyncStatus(){
+  const el=document.getElementById('sync-status'); if(!el) return;
+  if(!syncEnabled()){ el.textContent='未設定（URLを入れると自動同期が始まります）'; return; }
+  const m=DB.syncMeta||{};
+  el.textContent='最終送信 '+hhmm(m.lastPushAt)+' / 最終取得 '+hhmm(m.lastPullAt);
+}
+// 手動「今すぐ同期」＝ pull（マージ）→ push。結果は必ずtoastで返す
+async function syncNow(){
+  const inp=document.getElementById('sync-url');
+  if(inp) setSyncUrl(inp.value);
+  if(!syncEnabled()){ toast('同期URLを入力してください'); return; }
+  toast('同期中…');
+  const p=await syncPull({manual:true});
+  if(!p.ok){ toast('同期失敗: '+p.reason); return; }
+  const q=await syncPush();
+  if(!q.ok){ toast('取得はできましたが送信に失敗: '+q.reason); return; }
+  if(p.total>0) toast('同期完了: '+p.total+'件を取り込み／送信済み');
+  else toast('同期完了: 取り込み0件／送信済み');
+  renderSyncStatus();
+}
+// pullでデータが変わったときの再描画。initRender()は呼ばない（日付欄のリセットと移行処理の再実行を避ける）
+function syncRerender(){
+  try{
+    applyTheme();
+    fillFilter(); fillExSelect(); renderExList();
+    renderTodayLogs(); renderRecommend(); renderTemplates();
+    renderBackupReminder(); renderDataManage();
+    const act=document.querySelector('.tabs button.active');
+    const v=act && act.dataset.v;
+    if(v==='balance') renderBalance();
+    if(v==='history') renderHistory();
+    if(v==='weight') renderWeight();
+    if(v==='strength') renderStrength();
+    if(v==='settings') renderSettings();
+  }catch(e){ console.error('syncRerender failed', e); }
+}
+// 発火点②：アプリに戻ったとき（前回pullから60秒以上あいていれば）
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible') return;
+  if(!syncEnabled()) return;
+  if(Date.now()-_syncLastPullAt < SYNC_PULL_MIN_INTERVAL_MS) return;
+  syncPull({auto:true}).catch(()=>{});
+});
+
 //=========== 初期化 ===========
 function initRender(){
   migrateSplits();
@@ -3019,8 +3416,15 @@ function initRender(){
   document.getElementById('set-list').innerHTML=''; addSetRow();
   renderTodayLogs(); renderRecommend(); renderTemplates();
   renderBackupReminder(); renderDataManage();
+  renderSyncStatus();
   // 破損データを退避して初期化した場合は起動時に案内（退避キー kintore_balance_v2:broken:… に生データが残っている）
   if(_brokenStashed){ setTimeout(()=>toast('⚠️保存データが読めず初期化しました。退避済みなので復元可能です'), 400); }
+  // 発火点①：起動時に1回だけpull。initRender()はJSON取込・全削除からも呼ばれるので、
+  // そのたびに引っ張らないようフラグで起動時限定にする（同期OFFなら何も起きない）
+  if(!_syncBootPullDone && syncEnabled()){
+    _syncBootPullDone=true; _syncBootPending=true;
+    setTimeout(()=>{ syncPull({auto:true}).catch(()=>{}).then(syncBootDone, syncBootDone); }, 0);
+  }
 }
 document.getElementById('rec-date').addEventListener('change',()=>{ renderTodayLogs(); });
 initRender();
