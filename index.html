@@ -140,6 +140,15 @@
   .ex-item{display:flex; align-items:center; gap:9px; padding:11px 0; border-bottom:1px solid var(--line-soft);}
   .ex-item:last-child{border-bottom:none;}
   .ex-item .nm{flex:1; font-size:14px; color:var(--txt);}
+  /* 部位の折りたたみ見出し（2026-08-01：238種目を初期全展開すると長すぎるため） */
+  .ex-part{display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:10px 4px; margin-top:8px;
+    background:none; border:none; border-bottom:1px solid var(--line-soft); cursor:pointer;
+    font-family:var(--font-jp); font-size:14px; font-weight:700; text-align:left; color:var(--txt);
+    border-radius:6px; transition:background .12s var(--ease-out);}
+  .ex-part:hover{background:var(--panel2);}
+  body[data-theme="light"] .ex-part:hover{background:var(--paper-2);}
+  .ex-part svg.lucide{width:16px; height:16px; color:var(--sub); flex:none;}  /* lucideは<i>を<svg>へ置換するので i セレクタでは効かない */
+  .ex-part .cnt{margin-left:auto; font-size:12px; font-weight:600; color:var(--sub);}
   /* ---- segmented ---- */
   .seg{display:flex; background:var(--panel2); border:1px solid var(--line); border-radius:var(--r-md); padding:3px; gap:3px; margin-bottom:14px;}
   body[data-theme="light"] .seg{background:var(--paper-2);}
@@ -532,6 +541,7 @@
     </div>
     <div class="card">
       <h2>推移 <span class="r" id="bw-phase-label"></span></h2>
+      <div id="bw-index"></div>
       <div class="seg" id="bw-metric-seg">
         <button data-m="kg" class="active">体重</button>
         <button data-m="fat">体脂肪率</button>
@@ -544,10 +554,11 @@
 
   <!-- ===== 種目 ===== -->
   <div class="view" id="v-exercises">
+    <!-- 一覧が主役 → 追加 → 参考の図鑑、の順（2026-08-01：タブを開いてすぐ種目を探せるように） -->
     <div class="card">
-      <h2><i data-lucide="book-open"></i> 種目図鑑（参考）</h2>
-      <p class="muted mb">主要な筋トレ種目と「効く筋肉」をまとめた参考ポスター（全13枚）。タップで全画面・もう一度タップで拡大できます。</p>
-      <button class="btn" onclick="openGallery()"><i data-lucide="images"></i> 図鑑を開く</button>
+      <h2>登録済みの種目 <span class="r" id="ex-count"></span></h2>
+      <div class="search-wrap mb"><i data-lucide="search"></i><input id="ex-search" placeholder="種目を検索" oninput="renderExList()"></div>
+      <div id="ex-list"></div>
     </div>
     <div class="card">
       <h2>種目を追加</h2>
@@ -559,11 +570,9 @@
       <div id="ne-sec" class="mb"></div>
       <button class="btn" onclick="addExercise()">追加</button>
     </div>
-    <div class="card">
-      <h2>登録済みの種目 <span class="r" id="ex-count"></span></h2>
-      <div class="search-wrap mb"><i data-lucide="search"></i><input id="ex-search" placeholder="種目を検索" oninput="renderExList()"></div>
-      <div id="ex-list"></div>
-    </div>
+    <!-- 種目図鑑カードは2026-08-01に撤去（238種すべてに専用カード画像が揃い、13枚の一覧ポスターは役目が重複したため）。
+         裏の実装（gallery-overlay / openGallery / renderGallery）と images/posters/ は残してある＝戻すならこのカードを復活させるだけ。
+         ⚠️ openPoster / closePoster / #gal-viewer は種目一覧の🖼で使っているので消さないこと。 -->
   </div>
 
   <!-- ===== 設定 ===== -->
@@ -613,6 +622,9 @@
       <div class="row">
         <div><label>性別</label><select id="st-sex"><option value="male">男性</option><option value="female">女性</option></select></div>
         <div><label>年齢</label><input type="number" inputmode="numeric" id="st-age" placeholder="任意"></div>
+      </div>
+      <div class="row mt">
+        <div><label>身長 (cm)</label><input type="number" inputmode="decimal" id="st-height" placeholder="任意"></div>
         <div><label>体重 (kg)</label><input type="number" inputmode="decimal" id="st-bw" placeholder="体重"></div>
       </div>
       <div class="seg mt" id="st-basis-seg">
@@ -771,7 +783,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.07.30d";
+const APP_VERSION="2026.08.01e";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -833,7 +845,13 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 function showHow(name){ window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(name+' やり方 フォーム'),'_blank'); }
 function showImg(name){ window.open('https://www.google.com/search?tbm=isch&q='+encodeURIComponent(name+' 筋トレ フォーム'),'_blank'); }
 function showHowEx(id){ const ex=DB.exercises.find(e=>e.id===id); if(ex) showHow(ex.name); }
-function showImgEx(id){ const ex=DB.exercises.find(e=>e.id===id); if(ex) showImg(ex.name); }
+// 種目一覧の🖼ボタン：記録タブと同じGPTカード画像を全画面で見せる（2026-08-01。旧＝Google画像検索）。
+// gallery.js に無い自作種目だけ、従来どおりWeb画像検索へフォールバックする。
+function showImgEx(id){
+  const ex=DB.exercises.find(e=>e.id===id); if(!ex) return;
+  const f=(window.GALLERY&&window.GALLERY.exerciseImages||{})[ex.name];
+  if(f) openPoster(f); else showImg(ex.name);
+}
 function todayStr(){ const d=new Date(); const o=d.getTimezoneOffset(); return new Date(d-o*60000).toISOString().slice(0,10); }
 function fmt(n){ return Math.round(n).toLocaleString(); }
 function epley(w,r){ // 推定1RM：Epley と Brzycki の平均（高精度化）。名称は互換のため据え置き
@@ -2026,16 +2044,26 @@ function saveExEdit(id){
   e.sec=[...document.querySelectorAll('#ee-sec .pill.on')].map(x=>x.dataset.k).filter(k=>k!==e.part);
   save(); closeModal(); renderExList(); fillExSelect(); toast('更新しました');
 }
+// 種目一覧の部位アコーディオン（2026-08-01）。開閉はメモリのみに持つ＝リロードすると全部閉じる。
+// 「最初から一覧を出さない」のが目的なので、DB.settingsには保存しない（エクスポートJSONも汚さない）。
+let exOpen={};
+function toggleExPart(k){ exOpen[k]=!exOpen[k]; renderExList(); }
+
 function renderExList(){
   const box=document.getElementById('ex-list');
   const q=(document.getElementById('ex-search').value||'').trim().toLowerCase();
-  document.getElementById('ex-count').textContent=DB.exercises.length+'種目';
   const grouped={};
   DB.exercises.filter(e=>!q||e.name.toLowerCase().includes(q)).forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
+  const shown=Object.keys(grouped).reduce((a,k)=>a+grouped[k].length,0);
+  document.getElementById('ex-count').textContent=q?`${shown} / ${DB.exercises.length}種目`:DB.exercises.length+'種目';
   let html='';
   PARTS.forEach(p=>{
     if(!grouped[p.key]) return;
-    html+=`<div class="muted mt" style="font-weight:700;color:${p.color}">${p.name}</div>`;
+    const open=q?true:!!exOpen[p.key];   // 検索中は常に開く（結果が見えないと検索の意味がない）
+    html+=`<button class="ex-part" aria-expanded="${open}" onclick="toggleExPart('${p.key}')">
+      ${ic(open?'chevron-down':'chevron-right')}<span style="color:${p.color}">${p.name}</span>
+      <span class="cnt">${grouped[p.key].length}</span></button>`;
+    if(!open) return;
     grouped[p.key].forEach(e=>{
       const {primary,secondary,tertiary}=targetsOf(e);
       const dot=(col,names)=> names.size?`<span style="white-space:nowrap"><span style="color:${col}">●</span>${[...names].map(k=>partOf(k).name).join('・')}</span>`:'';
@@ -2391,7 +2419,30 @@ function saveBW(){
   document.getElementById('bw-kg').value=''; document.getElementById('bw-fat').value=''; document.getElementById('bw-muscle').value='';
   renderWeight(); toast('記録しました');
 }
+// BMI / FFMI（除脂肪量指数）＝身長を登録したときだけ出す（2026-08-01）。
+// FFMIは「筋肉の発達度」の指標＝除脂肪体重kg ÷ 身長m²。筋力レベル判定（体重比が世界共通の物差し）には
+// 身長を一切使わない＝独自補正を入れると他人と比較できない数字になるため。
+const FFMI_GUIDE={ male:{std:20, good:22, cap:25}, female:{std:16, good:18, cap:21} };
+function renderBodyIndex(){
+  const el=document.getElementById('bw-index'); if(!el) return;
+  const h=parseFloat(DB.settings.height)||0;
+  if(h<=0){ el.innerHTML='<p class="note">筋力タブの「あなたの情報」で身長を入れると、BMIとFFMI（筋肉の発達度）が出ます。</p>'; return; }
+  const last=DB.bodyweight.length?DB.bodyweight[DB.bodyweight.length-1]:null;
+  if(!last||!(last.kg>0)){ el.innerHTML='<p class="note">体重を記録するとBMIとFFMIが出ます。</p>'; return; }
+  const m=h/100, bmi=last.kg/(m*m);
+  let html=`<p class="note">BMI <b>${bmi.toFixed(1)}</b>`;
+  if(last.fat>0){
+    const lean=last.kg*(1-last.fat/100), ffmi=lean/(m*m);
+    const g=FFMI_GUIDE[DB.settings.sex]||FFMI_GUIDE.male;
+    html+=` ・ FFMI <b>${ffmi.toFixed(1)}</b>（除脂肪 ${lean.toFixed(1)}kg）`
+       +`<br><span class="muted">${last.date}時点。FFMIは${g.std}前後で標準的なトレーニー、${g.good}で良好、${g.cap}前後がナチュラルの上限目安</span>`;
+  } else {
+    html+=`<br><span class="muted">${last.date}時点。体脂肪率も記録するとFFMI（筋肉の発達度）が出ます</span>`;
+  }
+  el.innerHTML=html+'</p>';
+}
 function renderWeight(){
+  renderBodyIndex();
   document.querySelectorAll('#phase-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.p===(DB.settings.phase||'maintain')); b.onclick=()=>{ DB.settings.phase=b.dataset.p; save(); renderWeight(); }; });
   document.querySelectorAll('#bw-metric-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.m===bwMetric); b.onclick=()=>{ bwMetric=b.dataset.m; renderWeight(); }; });
   const ph=PHASES[DB.settings.phase||'maintain'];
@@ -2486,6 +2537,9 @@ function renderStrength(){
   const bwInput=document.getElementById('st-bw'); if(document.activeElement!==bwInput) bwInput.value=latestBW()||'';
   document.getElementById('st-sex').onchange=e=>{ DB.settings.sex=e.target.value; save(); renderStrength(); };
   document.getElementById('st-age').onchange=e=>{ DB.settings.age=parseInt(e.target.value)||0; save(); renderStrength(); };
+  document.getElementById('st-height').value=DB.settings.height||'';
+  document.getElementById('st-height').onchange=e=>{ const v=parseFloat(e.target.value);
+    DB.settings.height=(v>0?v:0); save(); renderBodyIndex(); }; // 身長はBMI/FFMI専用＝筋力レベル判定には使わない
   bwInput.onchange=e=>{ const kg=parseFloat(e.target.value); if(kg>0){ const d=todayStr(); DB.bodyweight=DB.bodyweight.filter(b=>b.date!==d); DB.bodyweight.push({date:d,kg}); DB.bodyweight.sort((a,b)=>a.date<b.date?-1:1); save(); } renderStrength(); };
   document.querySelectorAll('#st-basis-seg button').forEach(b=>{ b.classList.toggle('active', b.dataset.b===curStBasis); b.onclick=()=>{ curStBasis=b.dataset.b; renderStrength(); }; });
   const std=STD[DB.settings.sex], age=DB.settings.age||0, ageF=ageFactor(age), bw=latestBW();
