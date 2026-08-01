@@ -783,7 +783,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.01e";
+const APP_VERSION="2026.08.01f";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -817,6 +817,10 @@ function load(){
       d.settings.kegelLevel = d.settings.kegelLevel || "beginner"; // ケーゲル：レベル（既定=初級）
       if(!('lastBackupAt' in d.settings)) d.settings.lastBackupAt = null; // バックアップ日：既存スキーマ非破壊で補完（2026-07-11d）
       d.exercises.forEach(e=>{ if(!e.sec) e.sec=(SECONDARY[e.name]||[]).filter(k=>k!==e.part); });
+      // 2026-08-01：idが欠けている／重複しているログを自己修復する。
+      // idは編集・削除の唯一の手がかりなので、壊れていると鉛筆ボタンが黙って無反応になる。既存のidは変えない。
+      const seen=new Set();
+      (d.logs||[]).forEach(l=>{ if(!l.id || seen.has(l.id)) l.id=uid(); seen.add(l.id); });
       return d;
     }
   }catch(e){
@@ -1236,7 +1240,9 @@ function delLogHist(id){ if(!confirm('この記録を削除しますか？')) re
 
 //=========== ログ編集モーダル ===========
 function editLog(id){
-  const l=DB.logs.find(x=>x.id===id); if(!l) return;
+  // 2026-08-01：見つからないときに黙って終わると「押しても無反応」に見えるので、必ず理由を出す
+  const l=DB.logs.find(x=>x.id===id);
+  if(!l){ toast('この記録を開けませんでした（id:'+id+'）'); return; }
   const ex=DB.exercises.find(e=>e.id===l.exId)||{name:'(削除済)'};
   const rows=l.sets.map((s,i)=>`<div class="set-row"><span class="idx">${i+1}</span>
     <input type="number" class="m-w" value="${s.weight}" placeholder="kg">
