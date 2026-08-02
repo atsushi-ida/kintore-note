@@ -391,6 +391,9 @@
   .kg-toggle{display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--txt2); cursor:pointer; user-select:none; margin-top:4px;}
   .kg-toggle input{width:auto; margin:0;}
   /* 機能E1：筋力目標カード */
+  .goal-purpose{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;}
+  .goal-purpose .gp-lbl{font-size:12.5px; color:var(--sub); flex:none;}
+  .goal-purpose .seg{flex:1; min-width:170px; margin:0;}
   .goal-item{padding:11px 0; border-bottom:1px solid var(--line);}
   .goal-item:last-of-type{border-bottom:none;}
   .goal-head{display:flex; align-items:center; gap:8px;}
@@ -689,6 +692,16 @@
   <div class="view" id="v-strength">
     <div class="card" id="goal-card">
       <h2>🎯 目標 <span class="r">到達時期を幅で予測</span></h2>
+      <!-- 目的セグ（2026-08-02i）＝分析タブの #goal-seg と同じ settings.goal を共有。
+           「今週のペース」がどこから来た数字か分からない、という指摘への対応 -->
+      <div class="goal-purpose">
+        <span class="gp-lbl">トレーニングの目的 <span class="muted">（全種目共通）</span></span>
+        <div class="seg" id="goal-seg2">
+          <button data-g="strength">筋力</button>
+          <button data-g="hypertrophy">筋肥大</button>
+          <button data-g="maintain">維持</button>
+        </div>
+      </div>
       <div id="goal-list"></div>
       <div id="goal-add"></div>
       <button class="btn sec small mt" id="goal-add-btn" onclick="showAddGoal()"><i data-lucide="plus"></i> 目標を追加</button>
@@ -861,7 +874,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02h";
+const APP_VERSION="2026.08.02i";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1735,7 +1748,7 @@ function weakestLift(){
 function renderAdvice(){
   const box=document.getElementById('advice-body'); if(!box) return;
   const goal=DB.settings.goal||'hypertrophy';
-  document.querySelectorAll('#goal-seg button').forEach(b=>b.classList.toggle('active', b.dataset.g===goal));
+  syncGoalSegs();
   if(!lastMap){ box.innerHTML='<div class="empty">記録すると提案が表示されます。</div>'; return; }
   const {sets, weeks}=lastMap;
   const total=PARTS.reduce((s,p)=>s+sets[p.key],0);
@@ -1770,8 +1783,19 @@ function renderAdvice(){
   html+=`<p class="sub">一般的なガイドラインに基づく自動提案です。痛みがある場合は中止し専門家に相談してください。</p>`;
   box.innerHTML=html; refreshIcons();
 }
-document.querySelectorAll('#goal-seg button').forEach(b=>{
-  b.onclick=()=>{ DB.settings.goal=b.dataset.g; stampSettings(); save(); renderAdvice(); };
+// 目的セグは分析タブ(#goal-seg)と筋力タブの目標カード(#goal-seg2)の2箇所にあり、同じ settings.goal を共有する。
+// どちらで切り替えても両方の見た目と「今週のペース」が即座に揃う（2026-08-02i）。
+function syncGoalSegs(){
+  const g=DB.settings.goal||'hypertrophy';
+  document.querySelectorAll('#goal-seg button, #goal-seg2 button')
+    .forEach(b=>b.classList.toggle('active', b.dataset.g===g));
+}
+function setTrainGoal(g){
+  DB.settings.goal=g; stampSettings(); save();
+  syncGoalSegs(); renderAdvice(); renderGoals();   // ペース行も即更新
+}
+document.querySelectorAll('#goal-seg button, #goal-seg2 button').forEach(b=>{
+  b.onclick=()=>setTrainGoal(b.dataset.g);
 });
 
 //=========== 機能D：ケーゲル（骨盤底筋）ガイド ===========
@@ -2011,7 +2035,10 @@ function weekPaceText(current){
   const goal=DB.settings.goal||'hypertrophy';
   const P={ strength:{pct:0.825, scheme:'5×5'}, hypertrophy:{pct:0.70, scheme:'3×10'}, maintain:{pct:0.70, scheme:'2×8'} }[goal] || {pct:0.70, scheme:'3×10'};
   const w=round2_5(current*P.pct);
-  return `今週のペース：<b>${w}kg ${P.scheme}</b>（推定1RMの${Math.round(P.pct*100)}%）・週2〜3回`;
+  const lbl=(PRESCRIPTION[goal]||PRESCRIPTION.hypertrophy).label;
+  // 「上の目的セグから来た数字」だと分かるように由来を明示（2026-08-02i）
+  return `今週のペース：<b>${w}kg ${P.scheme}</b>・週2〜3回`
+    +`<span class="muted">（目的「${lbl}」＝推定1RMの${Math.round(P.pct*1000)/10}%。上のボタンで変わります）</span>`;
 }
 function predictText(est, goal){
   if(est.status==='nodata') return `<div class="goal-pred muted">${ic('info')} まず記録をつけてください（この種目のログから予測します）。</div>`;
@@ -2027,6 +2054,7 @@ function predictText(est, goal){
 }
 function renderGoals(){
   const box=document.getElementById('goal-list'); if(!box) return;
+  syncGoalSegs();   // 分析タブで切り替えてから筋力タブに来ても選択状態が合う
   const goals=(DB.goals||[]).filter(g=>g.type==='lift');
   if(!goals.length){ box.innerHTML='<p class="muted" style="margin:0">目標を追加すると、あなたのログから到達時期を<b>幅で</b>予測します（単一日付で断言しません）。</p>'; return; }
   let needSave=false;
