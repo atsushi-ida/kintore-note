@@ -874,7 +874,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02i";
+const APP_VERSION="2026.08.02j";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1573,6 +1573,22 @@ function renderRecommend(){
 }
 // F3：目標達成コーチのミッション群（アクティブなlift目標ごと）。文言はすべて「目安」
 const COACH_PACE={ strength:{pct:0.825, scheme:'5×5'}, hypertrophy:{pct:0.70, scheme:'3×10'}, maintain:{pct:0.70, scheme:'2×8'} };
+// 種目別の頻度目安（2026-08-02j）。床から引く高重量ヒンジ・クリーン系は全身の回復コストが大きく
+// 「週2〜3回」は多すぎる。逆に低負荷・自重の体幹系は週2回では足りない。
+// **リストに無い種目は従来どおり週2〜3回**＝大半の種目の表示は変わらない。
+const FREQ_LOW = new Set([   // 週1〜2回（高疲労）
+  'デッドリフト(コンベンショナル)','デッドリフト(スモウ)','ラックプル','ハックリフト',
+  'ジェファーソンスクワット','グッドモーニング','パワークリーン','ケトルベルクリーン','ボックスジャンプ',
+]);
+const FREQ_HIGH = new Set([  // 週3〜5回（低負荷・自重の体幹/骨盤底系）
+  '肛門開閉(骨盤底筋)','ドローイン','キャット&カウ','バードドッグ','デッドバグ',
+  'プランク','サイドプランク','スーパーマン','クラムシェル',
+]);
+function freqHint(exName){
+  if(FREQ_LOW.has(exName))  return {text:'週1〜2回', min:1};
+  if(FREQ_HIGH.has(exName)) return {text:'週3〜5回', min:3};
+  return {text:'週2〜3回', min:2};
+}
 function coachMissions(){
   const goals=(DB.goals||[]).filter(g=>g.type==='lift' && !g.done);
   if(!goals.length) return `<div class="coach-none muted"><i data-lucide="target"></i> 筋力タブで目標を設定するとコーチが始まります。</div>`;
@@ -1583,14 +1599,15 @@ function coachMissions(){
     const current=est.current||0;
     // 今週の処方（目的セグ×現在e1RM・2.5kg丸め）
     const P=COACH_PACE[DB.settings.goal||'hypertrophy']||COACH_PACE.hypertrophy;
+    const F=freqHint(g.exName);
     const presLine = current>0
-      ? `<div class="cm-presc">今週の目安：<b>${esc(g.exName)} ${round2_5(current*P.pct)}kg ${P.scheme}</b> <span class="muted">（推定1RMの${Math.round(P.pct*100)}%・週2〜3回）</span></div>`
+      ? `<div class="cm-presc">今週の目安：<b>${esc(g.exName)} ${round2_5(current*P.pct)}kg ${P.scheme}</b> <span class="muted">（推定1RMの${Math.round(P.pct*1000)/10}%・${F.text}）</span></div>`
       : `<div class="cm-presc muted">${esc(g.exName)}：記録がたまると今週の重量目安が出ます。</div>`;
-    // 頻度ミッション（直近7日・週2回目安）
+    // 頻度ミッション（直近7日・種目別の下限回数が目安）
     const doneCnt = ex ? wk7.filter(l=>l.exId===ex.id).length : 0;
-    const need = Math.max(0, 2-doneCnt);
+    const need = Math.max(0, F.min-doneCnt);
     const freqLine = need>0
-      ? `<span class="cm-tag">今週あと<b>${need}回</b>（週2回が目安）</span>`
+      ? `<span class="cm-tag">今週あと<b>${need}回</b>（${F.text}が目安）</span>`
       : `<span class="cm-tag ok">✅ 今週の頻度クリア</span>`;
     // ペース判定（3分岐）
     const pace=paceStatus(g, est);
@@ -2031,13 +2048,13 @@ function estimateGoal(goal){
   return {status:'level', current, target, lo:addMonths(today, monthsOpt), hi:addMonths(today, monthsCons), months:monthsBase, levelKey:lvlKey};
 }
 // 今週のペース（目的セグ settings.goal × 現在e1RM）
-function weekPaceText(current){
+function weekPaceText(current, exName){
   const goal=DB.settings.goal||'hypertrophy';
   const P={ strength:{pct:0.825, scheme:'5×5'}, hypertrophy:{pct:0.70, scheme:'3×10'}, maintain:{pct:0.70, scheme:'2×8'} }[goal] || {pct:0.70, scheme:'3×10'};
   const w=round2_5(current*P.pct);
   const lbl=(PRESCRIPTION[goal]||PRESCRIPTION.hypertrophy).label;
   // 「上の目的セグから来た数字」だと分かるように由来を明示（2026-08-02i）
-  return `今週のペース：<b>${w}kg ${P.scheme}</b>・週2〜3回`
+  return `今週のペース：<b>${w}kg ${P.scheme}</b>・<b>${freqHint(exName).text}</b>`
     +`<span class="muted">（目的「${lbl}」＝推定1RMの${Math.round(P.pct*1000)/10}%。上のボタンで変わります）</span>`;
 }
 function predictText(est, goal){
@@ -2067,7 +2084,7 @@ function renderGoals(){
     const startPct=target>0?Math.min(start/target*100,100):0;
     if(est.status==='done' && !g.done){ g.done=todayStr(); stamp(g); needSave=true; }
     const repNote=(g.targetReps>1)?` <span class="muted">(${g.targetW}kg×${g.targetReps}→1RM換算)</span>`:'';
-    const pace=(current>0 && est.status!=='done')?`<div class="goal-pace">${weekPaceText(current)}</div>`:'';
+    const pace=(current>0 && est.status!=='done')?`<div class="goal-pace">${weekPaceText(current, g.exName)}</div>`:'';
     return `<div class="goal-item">
       <div class="goal-head">
         <span class="goal-nm">${esc(g.exName)}</span>
