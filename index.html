@@ -373,6 +373,25 @@
   .advice-ex .ex-nm img{height:48px; width:auto; border-radius:6px; border:1px solid var(--line); vertical-align:middle;}
   .advice-rx{font-size:12px; color:var(--sub); line-height:1.55;}
   .advice-rx b{color:var(--accent);}
+  /* ---- 補うといいこと（2026-08-02k・記録させない読み物セクション） ---- */
+  .sup-sec{margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);}
+  .sup-h{font-size:13px; font-weight:700; color:var(--txt); margin-bottom:3px;}
+  .sup-lead{font-size:11px; color:var(--sub); line-height:1.6; margin-bottom:9px;}
+  .sup-item{display:flex; gap:8px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line);}
+  .sup-item:last-of-type{border-bottom:none;}
+  .sup-dot{flex:none; width:7px; height:7px; border-radius:50%; margin-top:6px; background:var(--accent);}
+  .sup-item.mob .sup-dot{background:var(--sub);}
+  .sup-body{min-width:0;}
+  .sup-nm{font-size:13px; font-weight:700; color:var(--txt); line-height:1.45; overflow-wrap:anywhere;}
+  .sup-tag{display:inline-block; margin-left:7px; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:600;
+    background:color-mix(in srgb,var(--accent) 13%, var(--panel)); color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 30%, transparent); vertical-align:1px;}
+  .sup-item.mob .sup-tag{background:var(--panel2); color:var(--sub); border-color:var(--line);}
+  .sup-why{font-size:12px; color:var(--sub); line-height:1.6; margin-top:3px; overflow-wrap:anywhere;}
+  .sup-why .sup-dose{color:var(--txt2); font-weight:600;}
+  /* カード画像があるモビリティ行はタップでカード全画面（2026-08-02l。種目一覧の🖼と同じ挙動） */
+  .sup-item.sup-tap{cursor:pointer;}
+  .sup-item.sup-tap:active{opacity:.65;}
+  .sup-img{margin-left:6px; font-size:11px; opacity:.85;}
   .sub{font-size:11px; color:var(--sub); line-height:1.6; margin-top:10px;}
   /* ---- ケーゲルガイド（機能D） ---- */
   .kegel-guide{text-align:center; padding:8px 0 4px;}
@@ -543,6 +562,7 @@
         <button data-g="maintain">維持</button>
       </div>
       <div id="advice-body"></div>
+      <div id="advice-supplement"></div>
     </div>
 
     <div class="card">
@@ -874,7 +894,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02j";
+const APP_VERSION="2026.08.02l";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1244,7 +1264,9 @@ function updateMuscleMap(){
 const PELVIC_NAMES=["肛門開閉(骨盤底筋)","ドローイン","ヒップリフト(ヒップブリッジ)","ヒップスラスト","ワイドスクワット(相撲)","スプリットスクワット","内転筋トレ(アダクション)","アダクション(内転)","バックキック(臀部)"];
 const GLUTE_NAMES=["ヒップスラスト","ヒップリフト(ヒップブリッジ)","バックキック(臀部)","クラムシェル","ショルダーブリッジ","ブルガリアンスクワット","ワイドスクワット(相撲)","スプリットスクワット","ランジ","アブダクション(外転)","ルーマニアンデッドリフト"];
 const PILATES_NAMES=["ハンドレッド","ロールアップ","ロールオーバー","シングルレッグストレッチ","ダブルレッグストレッチ","ティーザー","レッグサークル","スイミング","スワン","キャット&カウ","バードドッグ","サイドキック","ショルダーブリッジ","クラムシェル","プランク","サイドプランク"];
-const CATEGORIES={ glute:{label:'お尻',names:GLUTE_NAMES}, pelvic:{label:'精力・骨盤底',names:PELVIC_NAMES}, pilates:{label:'ピラティス',names:PILATES_NAMES} };
+// ストレッチ（2026-08-02l）。並びは他の一覧と同じ EX_COLLATOR('ja') 順に固定してある
+const STRETCH_NAMES=["もも裏のストレッチ","胸椎回旋ストレッチ","股関節90/90","広背筋のストレッチ","足首の背屈ストレッチ","大胸筋のストレッチ","腸腰筋のストレッチ","内転筋のストレッチ"];
+const CATEGORIES={ glute:{label:'お尻',names:GLUTE_NAMES}, pelvic:{label:'精力・骨盤底',names:PELVIC_NAMES}, pilates:{label:'ピラティス',names:PILATES_NAMES}, stretch:{label:'ストレッチ',names:STRETCH_NAMES} };
 function fillFilter(){
   const s=document.getElementById('rec-filter');
   const cats=Object.entries(CATEGORIES).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join('');
@@ -1583,6 +1605,9 @@ const FREQ_LOW = new Set([   // 週1〜2回（高疲労）
 const FREQ_HIGH = new Set([  // 週3〜5回（低負荷・自重の体幹/骨盤底系）
   '肛門開閉(骨盤底筋)','ドローイン','キャット&カウ','バードドッグ','デッドバグ',
   'プランク','サイドプランク','スーパーマン','クラムシェル',
+  // ストレッチ8種（2026-08-02l）＝負荷ゼロなので毎日でもよいが、目安は週3〜5回に揃える
+  'もも裏のストレッチ','腸腰筋のストレッチ','内転筋のストレッチ','足首の背屈ストレッチ',
+  '大胸筋のストレッチ','広背筋のストレッチ','胸椎回旋ストレッチ','股関節90/90',
 ]);
 function freqHint(exName){
   if(FREQ_LOW.has(exName))  return {text:'週1〜2回', min:1};
@@ -1766,6 +1791,8 @@ function renderAdvice(){
   const box=document.getElementById('advice-body'); if(!box) return;
   const goal=DB.settings.goal||'hypertrophy';
   syncGoalSegs();
+  // 「補うといいこと」は目標とケーゲルだけでも成立する＝lastMapの早期returnより前に描画する（2026-08-02k）
+  renderSupplement();
   if(!lastMap){ box.innerHTML='<div class="empty">記録すると提案が表示されます。</div>'; return; }
   const {sets, weeks}=lastMap;
   const total=PARTS.reduce((s,p)=>s+sets[p.key],0);
@@ -1799,6 +1826,222 @@ function renderAdvice(){
   }
   html+=`<p class="sub">一般的なガイドラインに基づく自動提案です。痛みがある場合は中止し専門家に相談してください。</p>`;
   box.innerHTML=html; refreshIcons();
+}
+
+//=========== 機能B-2：補うといいこと（2026-08-02k） ===========
+// 方針＝**記録させない**。静的テーブル＋既存データ(目標/ログ/ケーゲル/有酸素/偏り)の参照だけで文章を出す読み物。
+// 種目マスタ・DBスキーマ・集計(computeStats/subBreakdown/mergeDB)には一切書き込まない（subBreakdownは読むだけ）。
+// 強化種目はすべて種目マスタに実在する名前。モビリティは記録しないのでマスタに無くてよい。
+const ASSIST_BY_GOAL = {
+  'デッドリフト(コンベンショナル)': ['ルーマニアンデッドリフト','ペンドレイロウ','ヒップスラスト','ファーマーズウォーク','バックエクステンション'],
+  'デッドリフト(スモウ)':           ['ルーマニアンデッドリフト','ワイドスクワット(相撲)','ヒップスラスト','ペンドレイロウ'],
+  'バーベルスクワット(パラレル)':   ['ルーマニアンデッドリフト','ブルガリアンスクワット','レッグカール','プランク'],
+  'バーベルスクワット(フル)':       ['ルーマニアンデッドリフト','ブルガリアンスクワット','レッグカール','プランク'],
+  'ベンチプレス(フラット)':         ['ナローベンチプレス','ダンベルフライ','ベントオーバーロウ','フェイスプル','プレスダウン'],
+  'ベンチプレス(パーシャル)':       ['ベンチプレス(フラット)','ナローベンチプレス','ダンベルフライ','フェイスプル'],
+  'ショルダープレス(スタンディング)':['サイドレイズ(スタンディング)','フェイスプル','リアレイズ'],
+  'ショルダープレス(シーテッド)':   ['サイドレイズ(シーテッド)','フェイスプル','リアレイズ'],
+  '懸垂(チンニング)':               ['ワンハンドダンベルロウ','フェイスプル','バーベルカール(スタンディング)'],
+  'ラットプルダウン':               ['ワンハンドダンベルロウ','フェイスプル','シーテッドロウ'],
+};
+// 「なぜそれか」の1行（原則4＝根拠の無い提案は読まれない）。キーは上の強化種目名。
+const ASSIST_WHY = {
+  'ルーマニアンデッドリフト':'ハムと臀部のヒンジ動作を鍛え、引き始め〜膝上の失速に効く',
+  'ペンドレイロウ':'引く力と上背部の剛性を作り、途中で背中が丸まるのを防ぐ',
+  'ヒップスラスト':'股関節を伸ばし切る力を足し、ロックアウトを安定させる',
+  'ファーマーズウォーク':'握力と体幹が先に落ちて回数が止まるのを防ぐ',
+  'バックエクステンション':'脊柱起立筋の持久力を上げ、腰が丸まるのを抑える',
+  'ワイドスクワット(相撲)':'内転筋と股関節の開きを強化する（スモウの土台）',
+  'ブルガリアンスクワット':'左右差を埋め、片脚での安定を作る',
+  'レッグカール':'ハムを直接鍛え、膝まわりの前後バランスを整える',
+  'プランク':'体幹の剛性を上げ、重い日に腰が抜けるのを防ぐ',
+  'ナローベンチプレス':'三頭を強化し、押し切る局面（ロックアウト）を補う',
+  'ダンベルフライ':'胸のストレッチ域を鍛え、下ろした位置の弱さを補う',
+  'ベントオーバーロウ':'背中を厚くして、押すときの土台（支点）を作る',
+  'フェイスプル':'肩後部と回旋筋を鍛え、肩の詰まりと巻き肩を防ぐ',
+  'プレスダウン':'三頭の仕上げ。フィニッシュで押し切る力を足す',
+  'ベンチプレス(フラット)':'フルレンジで胸を鍛え、可動域に弱点を作らない',
+  'サイドレイズ(スタンディング)':'三角筋中部を鍛え、挙げる途中の停滞を減らす',
+  'サイドレイズ(シーテッド)':'三角筋中部を反動なしで鍛え、途中の停滞を減らす',
+  'リアレイズ':'三角筋後部を鍛え、前後差と巻き肩を防ぐ',
+  'ワンハンドダンベルロウ':'片側ずつ引いて左右差と可動域を補う',
+  'バーベルカール(スタンディング)':'二頭を強化し、引き切る仕上げを補う',
+  'シーテッドロウ':'水平に引く力を足し、広背筋の厚みを作る',
+  '内転筋トレ(アダクション)':'内転筋は骨盤底と一緒に働く。締める力の土台になる',
+  'ドローイン':'腹横筋を働かせ、骨盤底と連動する深層を目覚めさせる',
+};
+// モビリティ（**記録は任意**・提案は文章として出るだけ）。
+// 2026-08-02l：nameを種目マスタのストレッチ8種と**完全一致**させた。一致していると
+//   ①提案行からカード画像を開ける ②記録したい人は種目一覧から同じ名前で引ける、の2つが成立する。
+//   （'胸椎伸展'は種目を増やさない方針で '胸椎回旋ストレッチ' に寄せた。目的＝上背部を動かすで共通）
+const MOBILITY_BY_GOAL = {
+  deadlift: [
+    {name:'もも裏のストレッチ',   how:'30秒×2', why:'開始姿勢で腰が丸まるのを防ぐ'},
+    {name:'足首の背屈ストレッチ', how:'30秒×2', why:'すねが前に倒れず、バーが体から離れるのを防ぐ'},
+    {name:'胸椎回旋ストレッチ',   how:'各側10回',why:'上背部が固いと引き切る前に丸まる'},
+  ],
+  squat: [
+    {name:'足首の背屈ストレッチ', how:'30秒×2',  why:'深くしゃがむときの最大の制限要因'},
+    {name:'股関節90/90',          how:'各側30秒', why:'股関節の内外旋が出ないと膝が内に入る'},
+    {name:'内転筋のストレッチ',   how:'30秒×2',  why:'ワイドスタンスの底で突っ張る'},
+  ],
+  bench: [
+    {name:'大胸筋のストレッチ', how:'30秒×2', why:'肩が前に出たままだと肩を痛める'},
+    {name:'胸椎回旋ストレッチ', how:'10回',   why:'胸を張れないとブリッジが作れない'},
+  ],
+  press: [
+    {name:'大胸筋のストレッチ', how:'30秒×2', why:'頭上に腕が上がらない原因の多くが胸の硬さ'},
+    {name:'胸椎回旋ストレッチ', how:'10回',   why:'腰を反って代償するのを防ぐ'},
+  ],
+  pull: [
+    {name:'広背筋のストレッチ', how:'各側30秒', why:'肩の可動域を戻す'},
+    {name:'胸椎回旋ストレッチ', how:'10回',     why:'引き切る位置で胸を張るため'},
+  ],
+};
+// 目標種目名 → MOBILITY_BY_GOAL のキー。判定は部分一致（'バーベルスクワット(パラレル)'は'スクワット'で始まらないため）
+function mobilityKeyFor(name){
+  if(name.indexOf('スクワット')>=0)       return 'squat';
+  if(name.indexOf('デッドリフト')>=0)     return 'deadlift';
+  if(name.indexOf('ベンチプレス')>=0)     return 'bench';
+  if(name.indexOf('ショルダープレス')>=0) return 'press';
+  if(name.indexOf('懸垂')>=0 || name.indexOf('ラットプルダウン')>=0) return 'pull';
+  return null;
+}
+// ケーゲル実施 or 持久目標があるときの連動（強化はマスタ実在）
+const KEGEL_SUPPORT = {
+  assist: ['ヒップスラスト','内転筋トレ(アダクション)','ドローイン'],
+  mobility: [{name:'腸腰筋のストレッチ', how:'各側30秒', why:'骨盤が前に倒れたままだと骨盤底が働きにくい'}],
+  cardio: '有酸素を週150分（血管機能の改善は運動の中で最もエビデンスが厚い）',
+};
+// 偏り連動（サブ部位内訳の§4フラグと同じ判定・しきい値2倍）
+const BIAS_SUPPLEMENT = {
+  legs: {
+    assist:['ルーマニアンデッドリフト','ヒップスラスト'],
+    mobility:{name:'腸腰筋のストレッチ', how:'各側30秒', why:'四頭が優位だと骨盤が前に傾いたままになりやすい'},
+    why:'四頭筋が後面(ハム・尻)の2倍を超えています。膝のためにヒンジ系を足しましょう',
+  },
+  shoulder: {
+    assist:['フェイスプル','リアレイズ'],
+    mobility:{name:'大胸筋のストレッチ', how:'30秒×2', why:'胸が硬いと肩が前に出たままになる'},
+    why:'三角筋前部が後部の2倍を超えています。巻き肩予防にリア系を足しましょう',
+  },
+};
+const SUP_MAX=5;   // 出しすぎない（原則5）
+// 偏りフラグ（subBreakdownは**読むだけ**＝集計コードには一切触れない）
+function supBiasFlags(){
+  const out=[];
+  try{
+    const lg=subBreakdown('legs').amt||{};
+    if((lg.quad||0)>0 && (lg.quad||0) > ((lg.ham||0)+(lg.glute||0))*2) out.push('legs');
+    const sh=subBreakdown('shoulder').amt||{};
+    if((sh.front||0)>0 && (sh.front||0) > (sh.rear||0)*2) out.push('shoulder');
+  }catch(e){}
+  return out;
+}
+// モビリティの重複判定は（かっこ書き）を落とした名前で行う（'大胸筋のストレッチ'と'大胸筋のストレッチ（ドアフレーム）'を同一視）
+function mobKey(n){ return String(n).replace(/（[^）]*）/g,'').replace(/\([^)]*\)/g,'').trim(); }
+function supplementHTML(){
+  const goalsL=(DB.goals||[]).filter(g=>g.type==='lift' && !g.done);
+  const goalNames=goalsL.map(g=>g.exName);
+  const hasStamina=(DB.goals||[]).some(g=>g.type==='stamina' && !g.done);
+  const recent28=logsInDays(28);
+  const idName={}; (DB.exercises||[]).forEach(e=>{ idName[e.id]=e.name; });
+  const doneSet=new Set(recent28.map(l=>idName[l.exId]).filter(Boolean));
+  const kegelDone=doneSet.has(KEGEL_NAME);
+  const cut=new Date(); cut.setDate(cut.getDate()-27);
+  const cs=new Date(cut-cut.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const cardioNone=!(DB.cardio||[]).some(c=>c && c.date>=cs);
+  const pre=PRESCRIPTION[DB.settings.goal||'hypertrophy'];
+  const dose=`${pre.sets}セット×${pre.reps}回`;
+  const short=n=>String(n).replace(/[(（][^)）]*[)）]/g,'');
+
+  const bias=[], gAssist=[], keg=[], mob=[];
+  const usedEx=new Set(), usedMob=new Set();
+  const pushAssist=(arr, name, why)=>{
+    if(!name || usedEx.has(name) || doneSet.has(name)) return false;   // 既にやっているものは勧めない
+    usedEx.add(name); arr.push({kind:'assist', name, why});
+    return true;
+  };
+  const pushMob=(m)=>{
+    if(!m) return false; const k=mobKey(m.name); if(usedMob.has(k)) return false;
+    usedMob.add(k); mob.push({kind:'mob', name:m.name, why:m.why, how:m.how});
+    return true;
+  };
+
+  // 1. 偏り（最優先・フラグごとに強化1件。強化が両方実施済みならモビリティだけ）
+  supBiasFlags().forEach(k=>{
+    const b=BIAS_SUPPLEMENT[k]; if(!b) return;
+    const cand=b.assist.find(n=>!usedEx.has(n) && !doneSet.has(n));
+    if(cand) pushAssist(bias, cand, `${b.why}。${dose}`);
+    pushMob(b.mobility);
+  });
+  // 2. 目標ごとの強化（直近28日に記録が無いものだけ・上位2件）
+  goalNames.forEach(gn=>{
+    const list=ASSIST_BY_GOAL[gn]; if(!list) return;   // 該当が無ければモビリティとケーゲル分だけ出す
+    let n=0;
+    for(const nm of list){
+      if(n>=2) break;
+      if(pushAssist(gAssist, nm, `${short(gn)}の補助：${ASSIST_WHY[nm]||''}。${dose}`)) n++;
+    }
+  });
+  // 3. ケーゲル／持久目標の連動（強化1件＋有酸素1行。モビリティは4へ）
+  if(kegelDone || hasStamina){
+    const why=kegelDone ? 'ケーゲルと連動' : '持久目標の土台';
+    const cand=KEGEL_SUPPORT.assist.find(n=>!usedEx.has(n) && !doneSet.has(n));
+    if(cand) pushAssist(keg, cand, `${why}：${ASSIST_WHY[cand]||''}。${dose}`);
+    if(cardioNone) keg.push({kind:'cardio', name:'有酸素運動', why:KEGEL_SUPPORT.cardio+'。直近4週の有酸素の記録がありません'});
+    KEGEL_SUPPORT.mobility.forEach(pushMob);
+  }
+  // 4. 目標ごとのモビリティ（実施状況は見ない・目標ごと上位2件）
+  const goalMobKeys=new Set();
+  goalNames.forEach(gn=>{
+    const k=mobilityKeyFor(gn); if(k) goalMobKeys.add(k);
+    const list=MOBILITY_BY_GOAL[k]; if(!list) return;
+    let n=0; for(const m of list){ if(n>=2) break; if(pushMob(m)) n++; }
+  });
+  // 4b. 直近28日に**実施した種目**からも同じバケットを引く（2026-08-02l）。
+  //     目標にしていなくても、やっている種目に必要なモビリティは提案する
+  //     （例：ベンチプレスを目標にしていなくても記録していれば大胸筋のストレッチが出る）。
+  //     目標由来を優先＝すでに目標で引いたバケットはここでは引かない。合計5件上限は変えない。
+  const doneMobKeys=new Set();
+  doneSet.forEach(nm=>{ const k=mobilityKeyFor(nm); if(k && !goalMobKeys.has(k)) doneMobKeys.add(k); });
+  doneMobKeys.forEach(k=>{
+    const list=MOBILITY_BY_GOAL[k]; if(!list) return;
+    let n=0; for(const m of list){ if(n>=2) break; if(pushMob(m)) n++; }
+  });
+
+  // 5. 優先順＝偏り > 目標の強化 > ケーゲル > モビリティ／合計5件で打ち切り
+  const items=[].concat(bias, gAssist, keg, mob).slice(0, SUP_MAX);
+
+  const anchor = goalNames.length>0 || hasStamina || kegelDone || (DB.logs||[]).length>0;
+  if(!anchor) return '';   // 目標もケーゲルも記録も無い＝出す根拠が無いので非表示
+  const head=`<div class="sup-sec"><div class="sup-h">🌱 補うといいこと</div>`
+    +`<p class="sup-lead">いまの目標・記録から選んだ「足すといい」もの。<b>モビリティは記録不要</b>です（残したい人は種目一覧の「ストレッチ」から記録できます。負荷ゼロ＝集計には入りません）。</p>`;
+  if(items.length===0){
+    return head+`<div class="flag good">${ic('circle-check-big')}<span>いまの内容で足りています。追加したいことは特にありません。</span></div></div>`;
+  }
+  // カード画像がある名前だけ、行タップでカード全画面を出す（2026-08-02l。種目一覧の🖼と同じ openPoster）。
+  // 画像が無い名前は従来どおりテキストのみ＝タップ不可。
+  const galImg=(window.GALLERY&&window.GALLERY.exerciseImages)||{};
+  const rows=items.map(it=>{
+    if(it.kind==='mob'){
+      const f=galImg[it.name];
+      const tapC=f?' sup-tap':'';
+      const tapA=f?` role="button" tabindex="0" title="カードを表示" onclick="openPoster('${esc(f)}')"`:'';
+      return `<div class="sup-item mob${tapC}"${tapA}><span class="sup-dot"></span><div class="sup-body">`
+        +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">モビリティ</span>${f?'<span class="sup-img">🖼</span>':''}</div>`
+        +`<div class="sup-why">${esc(it.why)}。<span class="sup-dose">${esc(it.how)}・記録は不要</span></div></div></div>`;
+    }
+    const tag = it.kind==='cardio' ? '有酸素' : '強化';
+    return `<div class="sup-item"><span class="sup-dot"></span><div class="sup-body">`
+      +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">${tag}</span></div>`
+      +`<div class="sup-why">${esc(it.why)}</div></div></div>`;
+  }).join('');
+  return head+rows+`<p class="sub">一般的なガイドラインに基づく自動提案です（最大5件）。痛みがある場合は行わず専門家に相談してください。</p></div>`;
+}
+function renderSupplement(){
+  const el=document.getElementById('advice-supplement'); if(!el) return;
+  el.innerHTML=supplementHTML(); refreshIcons();
 }
 // 目的セグは分析タブ(#goal-seg)と筋力タブの目標カード(#goal-seg2)の2箇所にあり、同じ settings.goal を共有する。
 // どちらで切り替えても両方の見た目と「今週のペース」が即座に揃う（2026-08-02i）。
@@ -2441,6 +2684,18 @@ const LOAD_OVERRIDE = {
   "Lシット": {core:0.75, legs:0.5, triceps:0.5},
   "ケーブルオーバーヘッドエクステンション": {triceps:1.0, shoulder:0.25, core:0.25},
   "ケーブルワンハンドサイドレイズ": {shoulder:1.0, back:0.25, core:0.25},
+  // H. ストレッチ（2026-08-02l）＝**空オブジェクト**。loadFactors() が {} を返し computeStats のループが
+  //    空回りするので、記録してもどの部位にも 0 しか足さない（週セット数・レーダー・筋力判定に一切算入しない）。
+  //    集計コード（computeStats/metricVals/subBreakdown）を1行も変えずに「記録は任意・負荷ゼロ」を実現する要。
+  //    ⚠️ {} を消す・値を入れると即座に集計へ算入されるので触らないこと。
+  "もも裏のストレッチ": {},
+  "腸腰筋のストレッチ": {},
+  "内転筋のストレッチ": {},
+  "足首の背屈ストレッチ": {},
+  "大胸筋のストレッチ": {},
+  "広背筋のストレッチ": {},
+  "胸椎回旋ストレッチ": {},
+  "股関節90/90": {},
 };
 function loadFactors(ex){
   const o = LOAD_OVERRIDE[ex.name];
@@ -3794,6 +4049,20 @@ function migrateMachineSideRaise(){ // サイドレイズの器具違いを分�
     DB.exercises.push({id:uid(), name:'マシンサイドレイズ', part:'shoulder', sec:['back'], fav:false});
   DB.settings.machineSideRaiseV1=true; save();
 }
+// ストレッチ8種（2026-08-02l）。**記録は任意**＝やった記録を残したい人のためのマスタで、
+// 負荷は LOAD_OVERRIDE の {} により全部位ゼロ（集計・レーダー・筋力判定に一切算入しない）。
+// 「補うといいこと」のモビリティ提案と同じ名前に揃えてあるので、提案からカード画像も開ける。
+function migrateStretch(){
+  if(DB.settings.stretchV1) return;
+  const ADD=[
+    ["もも裏のストレッチ","legs",[]],["腸腰筋のストレッチ","legs",[]],
+    ["内転筋のストレッチ","legs",[]],["足首の背屈ストレッチ","legs",[]],
+    ["大胸筋のストレッチ","chest",[]],["広背筋のストレッチ","back",[]],
+    ["胸椎回旋ストレッチ","back",[]],["股関節90/90","legs",[]],
+  ];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.stretchV1=true; save();
+}
 // 定型メニュー「持久コア(約10分)」を一度だけ追加する（2026-08-02f）。
 // 位置づけ＝ユーザーが消してよいユーザーデータ。フラグで一度きり＝消しても復活しない。同名テンプレがあれば何もしない。
 // 等尺性（プランク系）は回数欄に秒を入れて記録する運用（ケーゲルの「回数=時間」と同型・新機構は作らない）。
@@ -4183,6 +4452,7 @@ function initRender(){
   migrateNewCards2026d();
   migrateBenchPartial();
   migrateMachineSideRaise();
+  migrateStretch();
   migrateStaminaTemplate();   // 定型メニュー「持久コア(約10分)」＝種目マスタの移行が全部終わった後（名前引きのため）
   applyTheme();
   fillCardioKinds();
