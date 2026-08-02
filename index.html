@@ -770,6 +770,7 @@ const DEFAULT_EXERCISES = [
 // 種目ごとの補助筋（主働筋は各種目の part）
 const SECONDARY = {
   "ベンチプレス":["triceps","shoulder"], "ベンチプレス(フラット)":["triceps","shoulder"],
+  "ベンチプレス(パーシャル)":["triceps","shoulder"],   // 可動域を上半分に制限した版（2026-08-01追加）
   "インクラインベンチプレス":["shoulder","triceps"],
   "インクラインベンチプレス(30°)":["shoulder","triceps"], "インクラインベンチプレス(45°)":["shoulder","triceps"], "インクラインベンチプレス(60°)":["shoulder","triceps"],
   "デクラインベンチプレス":["triceps"], "ダンベルプレス":["triceps","shoulder"],
@@ -784,6 +785,7 @@ const SECONDARY = {
   "ダンベルショルダープレス(スタンディング)":["triceps","core"], "ダンベルショルダープレス(シーテッド)":["triceps"],
   "アーノルドプレス":["triceps"],
   "アップライトロウ":["biceps"], "フェイスプル":["back"],
+  "マシンサイドレイズ":["back"],   // 青=僧帽筋上部（2026-08-02追加）
   "ナローベンチプレス":["chest","shoulder"], "ディップス(三頭)":["chest","shoulder"],
   "バーベルスクワット":["core","back"],
   "バーベルスクワット(パラレル)":["core","back"], "バーベルスクワット(フル)":["core","back"], "バーベルスクワット(フルボトム)":["core","back"],
@@ -794,7 +796,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.01j";
+const APP_VERSION="2026.08.02d";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -877,6 +879,10 @@ function addTomb(k, id){
   }catch(_){}
 }
 function partOf(k){ return PARTS.find(p=>p.key===k)||{name:"?",color:"#888"}; }
+// 種目の並び順＝日本語の五十音順（2026-08-01。238種目を目で探すため登録順から変更）。
+// 漢字始まりの種目（腕立て伏せ・懸垂など）は読みが分からないため末尾に固まる＝日本語ソートの仕様。
+const EX_COLLATOR = new Intl.Collator('ja');
+function byExName(a,b){ return EX_COLLATOR.compare(a.name, b.name); }
 function coefOf(k){ return DB.settings.coef[k] || 1; }
 function targetOf(k){ return DB.settings.targets[k] || 10; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1700); }
@@ -899,6 +905,8 @@ function epley(w,r){ // 推定1RM：Epley と Brzycki の平均（高精度化�
   const br= r<37 ? w*36/(37-r) : ep;
   return r<=12 ? (ep+br)/2 : ep; // 13回以上は推定信頼性が下がるためEpleyのみ
 }
+const E1RM_MAX_REPS=15; // これを超える高回数セットは推定1RMに使わない（15超はEpleyが過大評価する。60kg×20回→「1RM100kg」等の水増し防止 2026-08-01）
+function e1rmSet(w,r){ return r>E1RM_MAX_REPS ? 0 : epley(w,r); }
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 //=========== アイコン（Lucide） ===========
@@ -1101,6 +1109,7 @@ function bodySVG(fillFn, opts){
 }
 // 関与する筋肉（スタビライザー等。主働・補助の次のレベル＝青）
 const TERTIARY = {
+  "ベンチプレス(パーシャル)":["core"],
   "ベンチプレス(フラット)":["core"], "インクラインベンチプレス(30°)":["core"], "インクラインベンチプレス(45°)":["core"], "インクラインベンチプレス(60°)":["core"],
   "デクラインベンチプレス":["core","shoulder"], "ダンベルプレス":["core"], "インクラインダンベルプレス":["core"], "腕立て伏せ":[], "ディップス(胸)":["core"],
   "スミスマシンベンチプレス":["core"],
@@ -1189,6 +1198,7 @@ function fillExSelect(){
     else if(filt) list=list.filter(e=>e.part===filt);
     const grouped={};
     list.forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
+    PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExName); });   // 部位内は五十音順
     PARTS.forEach(p=>{
       if(!grouped[p.key]) return;
       const og=document.createElement('optgroup'); og.label=p.name;
@@ -1216,7 +1226,7 @@ function renumber(){ document.querySelectorAll('#set-list .idx').forEach((e,i)=>
 function update1rm(){
   document.querySelectorAll('#set-list .set-row').forEach(row=>{
     const w=parseFloat(row.querySelector('.s-w').value), r=parseInt(row.querySelector('.s-r').value);
-    const e=epley(w,r); row.querySelector('.s-1rm').textContent = e? '1RM≈'+Math.round(e) : '';
+    const e=e1rmSet(w,r); row.querySelector('.s-1rm').textContent = e? '1RM≈'+Math.round(e) : '';
   });
 }
 function lastLogFor(exId){
@@ -1229,10 +1239,10 @@ function showPrev(){
   if(!ex){ box.innerHTML=''; return; }
   const last=lastLogFor(ex.id);
   if(!last){ box.innerHTML=`<div class="prev-box muted">この種目の記録はまだありません。最初の1回を記録しましょう</div>`; return; }
-  const best=last.sets.reduce((m,s)=>Math.max(m,epley(s.weight,s.reps)),0);
+  const best=last.sets.reduce((m,s)=>Math.max(m,e1rmSet(s.weight,s.reps)),0);
   const txt=last.sets.map(s=>`${s.weight||'-'}kg×${s.reps}`).join(' / ');
   const nt=nextTargetText(ex,last); // 機能C：次回重量の目安（漸進性過負荷）
-  box.innerHTML=`<div class="prev-box">前回(<b>${last.date}</b>)：${txt}<br>推定1RM <b>${Math.round(best)}kg</b>${last.memo?` ・ ${ic('sticky-note')} ${esc(last.memo)}`:''}${nt?`<br>${nt}`:''}</div>`;
+  box.innerHTML=`<div class="prev-box">前回(<b>${last.date}</b>)：${txt}<br>${best?`推定1RM <b>${Math.round(best)}kg</b>`:'<span class="muted">推定1RM —（16回以上の記録のみ）</span>'}${last.memo?` ・ ${ic('sticky-note')} ${esc(last.memo)}`:''}${nt?`<br>${nt}`:''}</div>`;
 }
 // 機能C：次回目安（表示のみ・自動入力はしない）
 const GOAL_TARGET_REPS={strength:5, hypertrophy:10, maintain:8};
@@ -1289,7 +1299,7 @@ function saveLog(){
   renderTodayLogs(); showPrev(); renderRecommend();
   // 自己ベスト判定
   const best=bestStats(exId);
-  const thisBest=sets.reduce((m,s)=>Math.max(m,epley(s.weight,s.reps)),0);
+  const thisBest=sets.reduce((m,s)=>Math.max(m,e1rmSet(s.weight,s.reps)),0);
   if(best && Math.round(thisBest)>=Math.round(best.e1rm) && thisBest>0) toast('自己ベスト更新！(推定1RM '+Math.round(thisBest)+'kg)');
   else toast('記録しました');
 }
@@ -1462,7 +1472,7 @@ function paceStatus(goal, est){
   logs.forEach(l=>{
     const d=Math.round((today-parseDate(l.date))/86400000); if(d<0) return;
     const wi=Math.floor(d/7); if(wi>=16) return;
-    const e=l.sets.reduce((m,s)=>Math.max(m,epley(s.weight,s.reps)),0);
+    const e=l.sets.reduce((m,s)=>Math.max(m,e1rmSet(s.weight,s.reps)),0);
     wk[wi]=Math.max(wk[wi]||0, e);
   });
   const keys=Object.keys(wk).map(Number).sort((a,b)=>a-b);
@@ -1828,7 +1838,7 @@ function estimateGoal(goal){
     if(daysAgo<0) return;
     const wi=Math.floor(daysAgo/7);
     if(wi>=16) return;
-    const e=l.sets.reduce((m,s)=>Math.max(m,epley(s.weight,s.reps)),0);
+    const e=l.sets.reduce((m,s)=>Math.max(m,e1rmSet(s.weight,s.reps)),0);
     wk[wi]=Math.max(wk[wi]||0, e);
   });
   const wkKeys=Object.keys(wk).map(Number).sort((a,b)=>a-b);
@@ -1937,7 +1947,7 @@ function addGoal(){
   // 作成時点の現在e1RM（開始値・薄く表示用）
   const ex=DB.exercises.find(e=>e.name===exName);
   let startE1RM=0;
-  if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, epley(s.weight,s.reps)); })); }
+  if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, e1rmSet(s.weight,s.reps)); })); }
   DB.goals.push(stamp({id:uid(), type:'lift', exName, targetW:w, targetReps:r, created:todayStr(), done:null, startE1RM}));
   save();
   document.getElementById('goal-add').innerHTML='';
@@ -1948,7 +1958,7 @@ function addIntermediateGoal(exName, w){
   DB.goals=DB.goals||[];
   const ex=DB.exercises.find(e=>e.name===exName);
   let startE1RM=0;
-  if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, epley(s.weight,s.reps)); })); }
+  if(ex){ DB.logs.filter(l=>l.exId===ex.id).forEach(l=>l.sets.forEach(s=>{ startE1RM=Math.max(startE1RM, e1rmSet(s.weight,s.reps)); })); }
   DB.goals.push(stamp({id:uid(), type:'lift', exName, targetW:w, targetReps:1, created:todayStr(), done:null, startE1RM}));
   save(); renderGoals(); toast('中間目標を追加しました');
 }
@@ -2149,6 +2159,7 @@ function renderExList(){
   const q=(document.getElementById('ex-search').value||'').trim().toLowerCase();
   const grouped={};
   DB.exercises.filter(e=>!q||e.name.toLowerCase().includes(q)).forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
+  PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExName); });   // 部位内は五十音順
   const shown=Object.keys(grouped).reduce((a,k)=>a+grouped[k].length,0);
   document.getElementById('ex-count').textContent=q?`${shown} / ${DB.exercises.length}種目`:DB.exercises.length+'種目';
   let html='';
@@ -2197,6 +2208,7 @@ const LOAD_OVERRIDE = {
   "バーベルスクワット(ハーフ)": {legs:0.75, core:0.25},
   "ラックプル": {back:1.0, legs:0.25, biceps:0.25},
   "フロアプレス": {chest:0.75, triceps:0.5, shoulder:0.25},
+  "ベンチプレス(パーシャル)": {chest:0.75, triceps:0.5, shoulder:0.25},   // 胸まで下ろさない＝ストレッチ域を使わないのでフロアプレスと同格
   // B. 高負荷コンパウンドの補正・4番手追加
   "デッドリフト(コンベンショナル)": {back:1.0, legs:0.75, core:0.25, biceps:0.25},
   "デッドリフト(スモウ)": {back:1.0, legs:0.75, core:0.25, biceps:0.25},
@@ -2220,6 +2232,10 @@ const LOAD_OVERRIDE = {
   "ドローイン": {core:0.25},
   "肛門開閉(骨盤底筋)": {core:0.25},
   "キャット&カウ": {back:0.25, core:0.25},
+  // F. 前腕種目（部位に「前腕」が無いため二頭で登録されている。二頭はほぼ働かないので0.25換算＝
+  //    週セット集計の水増し防止 2026-08-01。リバースカールは上腕筋が実働する肘屈曲種目なので1.0のまま）
+  "リストカール": {biceps:0.25},
+  "リバースリストカール": {biceps:0.25},
   // E. ピラティス
   "ハンドレッド": {core:0.75},
   "ロールアップ": {core:0.75},
@@ -2454,7 +2470,7 @@ function renderCalendar(){
 function bestStats(exId){
   const ls=DB.logs.filter(l=>l.exId===exId); if(!ls.length) return null;
   let maxW=0,e1rm=0,maxVol=0;
-  ls.forEach(l=>{ let vol=0; l.sets.forEach(s=>{ maxW=Math.max(maxW,s.weight); e1rm=Math.max(e1rm,epley(s.weight,s.reps)); vol+=s.weight*s.reps; }); maxVol=Math.max(maxVol,vol); });
+  ls.forEach(l=>{ let vol=0; l.sets.forEach(s=>{ maxW=Math.max(maxW,s.weight); e1rm=Math.max(e1rm,e1rmSet(s.weight,s.reps)); vol+=s.weight*s.reps; }); maxVol=Math.max(maxVol,vol); });
   return {maxW,e1rm,maxVol,count:ls.length};
 }
 function renderPR(){
@@ -3042,6 +3058,18 @@ function migrateNewCards2026d(){ // S47〜S58の新種目45（第7〜10弾・202
   ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
   DB.settings.newEx2026dV1=true; save();
 }
+function migrateBenchPartial(){ // 可動域を上半分に制限したベンチ（2026-08-01・ユーザー実運用に合わせて追加）
+  if(DB.settings.benchPartialV1) return;
+  if(!DB.exercises.some(e=>e.name==='ベンチプレス(パーシャル)'))
+    DB.exercises.push({id:uid(), name:'ベンチプレス(パーシャル)', part:'chest', sec:['triceps','shoulder'], fav:false});
+  DB.settings.benchPartialV1=true; save();
+}
+function migrateMachineSideRaise(){ // サイドレイズの器具違いを分離（2026-08-02。ダンベル=無印／ケーブル=既存／マシン=これ）
+  if(DB.settings.machineSideRaiseV1) return;
+  if(!DB.exercises.some(e=>e.name==='マシンサイドレイズ'))
+    DB.exercises.push({id:uid(), name:'マシンサイドレイズ', part:'shoulder', sec:['back'], fav:false});
+  DB.settings.machineSideRaiseV1=true; save();
+}
 
 //=========== 端末間の同期（GAS方式・2026-08-01i） ===========
 // 設計: ドキュメント/設計書_同期_2026-08-01.md ／ サーバ側: ドキュメント/GAS同期コード.gs.txt
@@ -3408,6 +3436,8 @@ function initRender(){
   migrateNewCards2026b();
   migrateNewCards2026c();
   migrateNewCards2026d();
+  migrateBenchPartial();
+  migrateMachineSideRaise();
   applyTheme();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
   document.getElementById('rec-date').value=todayStr();

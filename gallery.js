@@ -45,6 +45,7 @@ window.GALLERY = {
   exerciseImages: {
     // ── 胸 ──
     "ベンチプレス(フラット)": "images/exercises/rS23_c1.jpg",
+    "ベンチプレス(パーシャル)": "images/exercises/rS23_c1.jpg",
     "デクラインベンチプレス": "images/exercises/rS12_c1.jpg",
     "ダンベルプレス": "images/exercises/rS8_c2.jpg",
     "インクラインダンベルプレス": "images/exercises/rS23_c3.jpg",
@@ -81,6 +82,7 @@ window.GALLERY = {
     "アーノルドプレス": "images/exercises/rS16_c1.jpg",
     "サイドレイズ(スタンディング)": "images/exercises/rS8_c4.jpg",
     "サイドレイズ(シーテッド)": "images/exercises/rS8_c4.jpg",
+    "マシンサイドレイズ": "images/exercises/rS59_c1.jpg",
     "フロントレイズ": "images/exercises/rS16_c2.jpg",
     "リアレイズ": "images/exercises/rS16_c3.jpg",
     "リアデルトフライ(マシン)": "images/exercises/rS16_c4.jpg",
