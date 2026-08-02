@@ -49,6 +49,7 @@
     --hm-none:#6f7987; --hm-low:#54a4ee; --hm-ok:#43c07a; --hm-high:#ef6a55;
     --m-primary:#4ea3e6; --m-secondary:#e3b257; --mt-main:#df5b48; --mt-sub:#e3b257; --mt-inv:#4ea3e6;
     --m-skin:#c39e7a; --m-skin2:#b48d68; --m-mid:#a07c5a; --m-line:rgba(60,32,16,.45); --m-shade:rgba(40,20,8,.16);
+    --side-r:#e0735a; --side-l:#5f9fd0; --side-ink:#0f1318;   /* 左右ラベル（R=暖色/L=寒色・2026-08-02h） */
   }
   /* ===== LIGHT (Sōen paper) ===== */
   body[data-theme="light"]{
@@ -63,6 +64,7 @@
     --hm-none:#aeb6c0; --hm-low:#2f7fd6; --hm-ok:#2e9e5b; --hm-high:#d64541;
     --m-primary:#2c6b8f; --m-secondary:#c98a2f; --mt-main:#c0472f; --mt-sub:#c98a2f; --mt-inv:#2c6b8f;
     --m-skin:#e9d2b6; --m-skin2:#dcbd9b; --m-mid:#cbb193; --m-line:rgba(85,48,22,.5); --m-shade:rgba(80,45,20,.16);
+    --side-r:#b03e28; --side-l:#2c6b8f; --side-ink:#ffffff;   /* 左右ラベル（R=暖色/L=寒色・2026-08-02h） */
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{margin:0; background:var(--bg); color:var(--txt2);
@@ -159,6 +161,28 @@
   .set-row{display:flex; gap:8px; align-items:center; margin-bottom:8px;}
   .set-row .idx{width:20px; color:var(--sub); font-size:12px; text-align:center; font-variant-numeric:tabular-nums;}
   .set-row input{padding:9px;}
+  /* ---- 左右ラベル L/R（2026-08-02h・片側種目のときだけ描画） ---- */
+  .side-tg{display:flex; flex:none; border:1px solid var(--line); border-radius:var(--r-md);
+    overflow:hidden; background:var(--panel2);}
+  body[data-theme="light"] .side-tg{background:var(--paper-2);}
+  .side-tg button{width:22px; padding:9px 0; background:none; border:none; border-left:1px solid var(--line);
+    color:var(--sub); font-size:11px; font-weight:700; line-height:1; cursor:pointer;
+    font-family:var(--font-latin); transition:background .12s var(--ease-out), color .12s;}
+  .side-tg button:first-child{border-left:none;}
+  .side-tg button.on{color:var(--side-ink);}
+  .side-tg button.on[data-side=""]{background:var(--sub);}
+  .side-tg button.on[data-side="L"]{background:var(--side-l);}
+  .side-tg button.on[data-side="R"]{background:var(--side-r);}
+  /* トグルを足した分だけ重量/回数欄が潰れないよう、この行だけ余白を締める */
+  .set-row.uni{gap:6px;}
+  .set-row.uni .idx{flex:none;}        /* トグル分の圧縮でセット番号(10以上)が潰れないよう固定 */
+  .set-row.uni input{min-width:0; padding:9px 6px;}
+  .set-row.uni .s-1rm{width:48px !important; font-size:10px;}
+  /* 表示用バッジ（履歴・前回記録・今日のメニュー） */
+  .side-b{display:inline-block; min-width:14px; padding:0 4px; margin-right:3px; border-radius:4px;
+    font-family:var(--font-latin); font-size:10px; font-weight:700; line-height:16px; text-align:center;}
+  .side-b.sb-r{background:color-mix(in srgb,var(--side-r) 14%, transparent); color:var(--side-r);}
+  .side-b.sb-l{background:color-mix(in srgb,var(--side-l) 14%, transparent); color:var(--side-l);}   /* 14%＝ライト/ダーク両方でAA(4.5:1)を満たす上限 */
   .x{background:none;border:none;color:var(--sub);cursor:pointer;padding:4px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;transition:color .12s, background .12s;}
   .x:hover{color:var(--warn); background:color-mix(in srgb,var(--warn) 12%, transparent);}
   .x svg{width:17px;height:17px;}
@@ -837,7 +861,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02g";
+const APP_VERSION="2026.08.02h";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1239,15 +1263,76 @@ function fillExSelect(){
     });
   }
   if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
-  sel.onchange=()=>{ updateMuscleMap(); showPrev(); updateKegelBtn(); };
-  updateMuscleMap(); showPrev(); updateKegelBtn();
+  sel.onchange=()=>{ updateMuscleMap(); showPrev(); updateKegelBtn(); refreshSideToggles(); };
+  updateMuscleMap(); showPrev(); updateKegelBtn(); refreshSideToggles();
 }
 function howCurrent(){ const ex=DB.exercises.find(e=>e.id===document.getElementById('rec-ex').value); if(ex) showHow(ex.name); }
 function imgCurrent(){ const ex=DB.exercises.find(e=>e.id===document.getElementById('rec-ex').value); if(ex) showImg(ex.name); }
-function addSetRow(w="",r=""){
+//=========== 左右ラベル L/R（2026-08-02h） ===========
+// 設計: ドキュメント/設計書_左右ラベル_2026-08-02.md
+// 方針: セットに任意の `side`（'L'|'R'|未指定）を持たせるだけ。未指定なら**キー自体を作らない**ので
+//       既存JSONと差分ゼロ。集計（computeStats/metricVals/e1RM/PR/筋力判定/サブ部位内訳）は side を
+//       一切見ない＝左右合算のまま。mergeDB もセットを丸ごとcloneするので**同期コードは無変更**。
+// 判定は静的セット方式（SUB_MAPと同じ流儀）＝DBスキーマ非接触・過去ログに遡って効く。
+const UNILATERAL_NAMES=new Set([
+  // 脚
+  'ブルガリアンスクワット','スプリットスクワット','ピストルスクワット','シュリンプスクワット',
+  'ステップアップ','ステップダウン','ワンレッグヒップリフト','シングルレッグルーマニアンデッドリフト',
+  'サイドランジ','コサックスクワット','クラムシェル','サイドキック','ヒップアブダクション(サイドライイング)',
+  'バックキック(臀部)','スタンディングアブダクション','コペンハーゲンプランク','スケーターホップ',
+  // 背中
+  'ワンハンドダンベルロウ','ワンハンドケーブルロウ',
+  // 肩
+  'ケーブルワンハンドサイドレイズ','ハーフニーリングプレス',
+  // 腕
+  'コンセントレーションカール','クロスボディハンマーカール','キックバック','ケーブルキックバック',
+  // 胸
+  'マシンチェストプレス(片手)','ワンアームプッシュアップ','アンイーブンプッシュアップ','アーチャープッシュアップ',
+  // 体幹（ロータリートルソーは「捻る方向」だが R=右へ捻る／L=左へ捻る と読み替えて同じ仕組みに乗せる）
+  'サイドプランク','サイドベント','ロータリートルソー','スーツケースキャリー','ランドマインツイスト',
+  'ケトルベルウィンドミル','ターキッシュゲットアップ','ウィンドシールドワイパー',
+]);
+function isUnilateral(ex){ return !!ex && UNILATERAL_NAMES.has(ex.name); }
+function normSide(v){ return (v==='L'||v==='R')?v:''; }          // undefined/'' は同一に扱う
+function curRecEx(){ const s=document.getElementById('rec-ex'); return s?(DB.exercises.find(e=>e.id===s.value)||null):null; }
+// 表示用バッジ（履歴・前回記録・今日のメニュー）。side未指定は空文字＝従来表示のまま
+function sideBadge(s){ const v=normSide(s&&s.side); return v?`<span class="side-b sb-${v.toLowerCase()}">${v}</span>`:''; }
+function setsText(sets, withKg){
+  return sets.map(s=>`${sideBadge(s)}${s.weight||'-'}${withKg?'kg':''}×${s.reps}`).join(' / ');
+}
+// [ — | L | R ] トグル
+function sideTgHTML(cur){
+  cur=normSide(cur);
+  const b=(v,lab)=>`<button type="button" class="${cur===v?'on':''}" data-side="${v}" onclick="pickSide(this)" aria-label="${lab}">${lab}</button>`;
+  return `<span class="side-tg">${b('','—')}${b('L','L')}${b('R','R')}</span>`;
+}
+function pickSide(btn){ btn.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===btn)); }
+function rowSide(row){ const on=row.querySelector('.side-tg button.on'); return on?normSide(on.getAttribute('data-side')):''; }
+// 直前行と逆のsideを返す（R→L→R…と交互。直前が—なら—）
+function nextSideFor(container){
+  const rows=container.querySelectorAll('.set-row'); const prev=rows[rows.length-1];
+  if(!prev) return '';
+  const pv=rowSide(prev);
+  return pv==='L'?'R':(pv==='R'?'L':'');
+}
+// 種目を切り替えたとき、既存のセット行のトグルを付け外しする（値は保持）
+function refreshSideToggles(){
+  const list=document.getElementById('set-list'); if(!list) return;
+  const uni=isUnilateral(curRecEx());
+  list.querySelectorAll('.set-row').forEach(row=>{
+    const tg=row.querySelector('.side-tg');
+    if(uni && !tg){ row.classList.add('uni'); row.querySelector('.idx').insertAdjacentHTML('afterend', sideTgHTML('')); }
+    else if(!uni && tg){ tg.remove(); row.classList.remove('uni'); }
+  });
+}
+// side: null=自動（直前行と逆）／'L'|'R'|''=明示指定
+function addSetRow(w="",r="",side=null){
   const list=document.getElementById('set-list');
-  const div=document.createElement('div'); div.className='set-row';
+  const uni=isUnilateral(curRecEx());
+  const s = uni ? (side===null ? nextSideFor(list) : normSide(side)) : '';
+  const div=document.createElement('div'); div.className='set-row'+(uni?' uni':'');
   div.innerHTML=`<span class="idx">${list.children.length+1}</span>
+    ${uni?sideTgHTML(s):''}
     <input type="number" inputmode="decimal" placeholder="kg" value="${w}" class="s-w" oninput="update1rm()">
     <input type="number" inputmode="numeric" placeholder="回" value="${r}" class="s-r" oninput="update1rm()">
     <span class="muted s-1rm" style="width:62px;text-align:right;font-size:11px"></span>
@@ -1272,7 +1357,7 @@ function showPrev(){
   const last=lastLogFor(ex.id);
   if(!last){ box.innerHTML=`<div class="prev-box muted">この種目の記録はまだありません。最初の1回を記録しましょう</div>`; return; }
   const best=last.sets.reduce((m,s)=>Math.max(m,e1rmSet(s.weight,s.reps)),0);
-  const txt=last.sets.map(s=>`${s.weight||'-'}kg×${s.reps}`).join(' / ');
+  const txt=setsText(last.sets, true);
   const nt=nextTargetText(ex,last); // 機能C：次回重量の目安（漸進性過負荷）
   box.innerHTML=`<div class="prev-box">前回(<b>${last.date}</b>)：${txt}<br>${best?`推定1RM <b>${Math.round(best)}kg</b>`:'<span class="muted">推定1RM —（16回以上の記録のみ）</span>'}${last.memo?` ・ ${ic('sticky-note')} ${esc(last.memo)}`:''}${nt?`<br>${nt}`:''}</div>`;
 }
@@ -1300,7 +1385,7 @@ function copyPrev(){
   const last=ex&&lastLogFor(ex.id);
   if(!last){ toast('前回の記録がありません'); return; }
   document.getElementById('set-list').innerHTML='';
-  last.sets.forEach(s=>addSetRow(s.weight||'', s.reps));
+  last.sets.forEach(s=>addSetRow(s.weight||'', s.reps, s.side||''));   // sideも復元（設計3-2）
   toast('前回の内容をコピーしました');
 }
 // ログ追加の共通経路（saveLog / ケーゲル完了 が共用。二重実装しない）
@@ -1319,7 +1404,11 @@ function saveLog(){
   const sets=[];
   document.querySelectorAll('#set-list .set-row').forEach(row=>{
     const w=parseFloat(row.querySelector('.s-w').value), r=parseInt(row.querySelector('.s-r').value);
-    if(!isNaN(r)&&r>0) sets.push({weight:isNaN(w)?0:w, reps:r});
+    if(!isNaN(r)&&r>0){
+      const o={weight:isNaN(w)?0:w, reps:r};
+      const sd=rowSide(row); if(sd) o.side=sd;   // 未指定ならキー自体を作らない（既存JSONと差分ゼロ）
+      sets.push(o);
+    }
   });
   if(!exId){ toast('種目を選んでください'); return; }
   if(sets.length===0){ toast('回数を入力してください'); return; }
@@ -1347,7 +1436,7 @@ function renderTodayLogs(){
     const ex=DB.exercises.find(e=>e.id===l.exId)||{name:"(削除済)",part:"core"};
     const p=partOf(ex.part);
     const vol=l.sets.reduce((s,x)=>s+x.weight*x.reps,0); tv+=vol; ts+=l.sets.length;
-    const setsTxt=l.sets.map(s=>`${s.weight||'-'}×${s.reps}`).join(' / ');
+    const setsTxt=setsText(l.sets, false);
     return `<div class="ex-item">
       <span class="chip" style="background:${p.color}22;color:${p.color}">${p.name}</span>
       <div class="nm"><b>${esc(ex.name)}</b><br><span class="muted">${setsTxt} ・ ${fmt(vol)}kg${l.rpe?` ・ RPE${l.rpe}`:''}${l.memo?` ・ ${ic('sticky-note')} ${esc(l.memo)}`:''}</span></div>
@@ -1366,7 +1455,10 @@ function editLog(id){
   const l=DB.logs.find(x=>x.id===id);
   if(!l){ toast('この記録を開けませんでした（id:'+id+'）'); return; }
   const ex=DB.exercises.find(e=>e.id===l.exId)||{name:'(削除済)'};
-  const rows=l.sets.map((s,i)=>`<div class="set-row"><span class="idx">${i+1}</span>
+  // 片側種目、または既にsideが入っているログなら編集モーダルでもトグルを出す（削除済み種目でも直せるように）
+  modalUni = isUnilateral(ex) || l.sets.some(s=>normSide(s.side));
+  const rows=l.sets.map((s,i)=>`<div class="set-row${modalUni?' uni':''}"><span class="idx">${i+1}</span>
+    ${modalUni?sideTgHTML(s.side):''}
     <input type="number" class="m-w" value="${s.weight}" placeholder="kg">
     <input type="number" class="m-r" value="${s.reps}" placeholder="回">
     <button class="x" onclick="this.parentNode.remove()">${ic('x')}</button></div>`).join('');
@@ -1379,17 +1471,23 @@ function editLog(id){
     <div class="row mt"><button class="btn" onclick="saveEdit('${id}')">保存</button>
     <button class="btn ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
+let modalUni=false;   // 編集モーダルで左右トグルを出すか（editLogでセット）
 function modalAddSet(){
-  const d=document.createElement('div'); d.className='set-row';
-  d.innerHTML=`<span class="idx">+</span><input type="number" class="m-w" placeholder="kg"><input type="number" class="m-r" placeholder="回"><button class="x" onclick="this.parentNode.remove()">${ic('x')}</button>`;
-  document.getElementById('m-sets').appendChild(d);
+  const box=document.getElementById('m-sets');
+  const d=document.createElement('div'); d.className='set-row'+(modalUni?' uni':'');
+  d.innerHTML=`<span class="idx">+</span>${modalUni?sideTgHTML(nextSideFor(box)):''}<input type="number" class="m-w" placeholder="kg"><input type="number" class="m-r" placeholder="回"><button class="x" onclick="this.parentNode.remove()">${ic('x')}</button>`;
+  box.appendChild(d);
 }
 function saveEdit(id){
   const l=DB.logs.find(x=>x.id===id); if(!l) return;
   const sets=[];
   document.querySelectorAll('#m-sets .set-row').forEach(row=>{
     const w=parseFloat(row.querySelector('.m-w').value), r=parseInt(row.querySelector('.m-r').value);
-    if(!isNaN(r)&&r>0) sets.push({weight:isNaN(w)?0:w, reps:r});
+    if(!isNaN(r)&&r>0){
+      const o={weight:isNaN(w)?0:w, reps:r};
+      const sd=rowSide(row); if(sd) o.side=sd;   // 未指定ならキー自体を作らない
+      sets.push(o);
+    }
   });
   if(sets.length===0){ toast('回数を入力してください'); return; }
   l.sets=sets; l.date=document.getElementById('m-date').value||l.date;
@@ -2875,7 +2973,7 @@ function renderHistory(){
     const items=dayLogs.map(l=>{
       const ex=DB.exercises.find(e=>e.id===l.exId)||{name:"(削除済)",part:"core"}; const p=partOf(ex.part);
       const vol=l.sets.reduce((s,x)=>s+x.weight*x.reps,0);
-      const setsTxt=l.sets.map(s=>`${s.weight||'-'}×${s.reps}`).join(' / ');
+      const setsTxt=setsText(l.sets, false);
       return `<div class="ex-item">
         <span class="chip" style="background:${p.color}22;color:${p.color}">${p.name}</span>
         <div class="nm"><b>${esc(ex.name)}</b><br><span class="muted">${setsTxt} ・ ${fmt(vol)}kg${l.rpe?' ・ RPE'+l.rpe:''}${l.memo?' ・ '+ic('sticky-note')+' '+esc(l.memo):''}</span></div>
