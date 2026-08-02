@@ -175,6 +175,19 @@
   .bar-fill{height:100%; border-radius:var(--r-pill); transition:width .5s var(--ease-out);}
   .bar-target{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--txt); opacity:.45;}
   .note{font-size:12px; color:var(--sub); margin-top:8px; line-height:1.65;}
+  /* サブ部位内訳（部位詳細モーダル内・2026-08-02g） */
+  .sub-sec{border-top:1px solid var(--line-soft); padding-top:13px;}
+  .sub-sec-h{font-size:12.5px; font-weight:700; color:var(--txt2); margin-bottom:9px;}
+  .sub-bar{margin-bottom:9px;}
+  .sub-top{font-size:11px; color:var(--sub); margin-top:4px; line-height:1.5; overflow-wrap:anywhere;}
+  .sub-note-in{display:block; font-size:11px; opacity:.8; margin-top:3px;}
+  /* ---- 有酸素（2026-08-02f） ---- */
+  .cd-chip{background:color-mix(in srgb,var(--m-primary) 14%, transparent); color:var(--m-primary);}
+  .cd-mini{display:flex; align-items:flex-end; gap:5px; height:96px; margin-top:16px;}
+  .cd-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;}
+  .cd-bar{width:100%; max-width:26px; background:var(--m-primary); border-radius:4px 4px 0 0; min-height:2px;}
+  .cd-val{font-size:10px; color:var(--sub); line-height:1.2; height:12px; font-variant-numeric:tabular-nums;}
+  .cd-lbl{font-size:9.5px; color:var(--sub); margin-top:3px; white-space:nowrap;}
   /* ---- flags / alerts ---- */
   .flag{font-size:12.5px; padding:11px 13px; border-radius:var(--r-md); margin-bottom:8px; display:flex; gap:9px; align-items:flex-start; line-height:1.55; border:1px solid;}
   .flag svg{flex:none; margin-top:1px;}
@@ -192,7 +205,6 @@
   body[data-theme="light"] .ex-photo{background:var(--paper-2);}
   /* 表示幅を全種目280pxに統一（原寸が小さいカードも拡大表示・鮮明さは@2x版で補強） */
   .ex-photo img{width:min(100%,280px); height:auto; border-radius:10px; display:inline-block; vertical-align:middle;}
-  .mm-toggle{display:inline-block; margin-top:8px; font-size:12px; color:var(--sub); text-decoration:underline; cursor:pointer;}
   .mus{transition:opacity .12s var(--ease-out);}
   #heatmap .mus{cursor:pointer;}
   #heatmap .mus:hover{opacity:.78;}
@@ -419,6 +431,19 @@
       <div id="today-logs"></div>
     </div>
 
+    <!-- 有酸素（2026-08-02f）。日付は上の #rec-date を共用。筋トレの集計には一切算入しない -->
+    <div class="card">
+      <h2>🫀 有酸素<span class="r" id="cardio-today-sum"></span></h2>
+      <div class="row">
+        <div style="flex:1.2"><label>種類</label><select id="cd-kind"></select></div>
+        <div><label>時間（分）</label><input type="number" id="cd-min" min="1" step="1" inputmode="numeric" placeholder="30"></div>
+        <div><label>平均心拍（任意）</label><input type="number" id="cd-hr" min="30" max="250" step="1" inputmode="numeric" placeholder="—"></div>
+      </div>
+      <button class="btn sec mt" onclick="addCardio()"><i data-lucide="plus"></i> 有酸素を追加</button>
+      <div id="cardio-today" class="mt"></div>
+      <p class="note">上の「日付」欄の日に記録されます。Garmin Connect のCSVは「設定」タブから取り込めます。</p>
+    </div>
+
     <div class="card">
       <h2><i data-lucide="timer"></i> 休憩タイマー</h2>
       <div class="timer-box">
@@ -469,6 +494,13 @@
         <div id="bal-bars"></div>
       </div>
       <p class="note" id="bal-note"></p>
+    </div>
+
+    <!-- 週間有酸素（2026-08-02f）。部位レーダー・週セット数・筋力判定とは完全に独立したカード -->
+    <div class="card">
+      <h2>🫀 週間有酸素 <span class="r">筋トレの集計には入りません</span></h2>
+      <div id="cardio-week"></div>
+      <p class="note">WHO推奨は中強度150分/週。血管・持久力の改善は3〜6ヶ月続けてから。目標分数は「設定」タブで変えられます。</p>
     </div>
 
     <div class="card">
@@ -600,6 +632,15 @@
       <div id="restore-wrap"></div>
       <button class="btn danger mt" onclick="wipeAll()">全データを削除</button>
       <p class="note" id="persist-status" style="margin-top:8px">ストレージ保護: 確認中…</p>
+      <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+      <h3 style="margin:0 0 6px;font-size:14px">🫀 有酸素</h3>
+      <div class="row" style="align-items:center;gap:8px">
+        <label style="margin:0;flex:1">週間の目標時間</label>
+        <input type="number" id="cd-target" min="1" step="10" style="flex:0 0 90px" onchange="setCardioTarget(this.value)"> <span class="muted">分/週</span>
+      </div>
+      <button class="btn sec mt" onclick="document.getElementById('garmin-csv').click()">Garmin CSVを取り込む</button>
+      <input type="file" id="garmin-csv" accept=".csv,text/csv" style="display:none" onchange="importGarminCSV(event)">
+      <p class="note">Garmin Connect（Web）の「アクティビティ」→ 一覧右上の書き出しでCSVを保存し、そのファイルを選びます。<b>筋力トレーニング・ヨガは取り込みません</b>（筋トレはこのアプリの記録が正）。同じCSVを何度入れても重複は自動でスキップします。通信は発生しません。</p>
       <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
       <h3 style="margin:0 0 6px;font-size:14px">☁️ 端末間の同期（GAS）</h3>
       <label style="margin-top:0">同期URL</label>
@@ -796,7 +837,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02d";
+const APP_VERSION="2026.08.02g";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -806,9 +847,10 @@ function defaultDB(){
   return {
     exercises: DEFAULT_EXERCISES.map((e,i)=>({id:"d"+i, name:e[0], part:e[1], sec:(SECONDARY[e[0]]||[]).filter(k=>k!==e[1]), fav:false})),
     logs: [], bodyweight: [], goals: [], templates: [],
+    cardio: [],     // 有酸素（2026-08-02f）。**筋トレとは別コレクション**＝部位レーダー・週セット数・筋力判定には一切算入しない
     tomb: [],       // 削除の墓標（端末間同期用・2026-08-01i）。同期OFFでも記録する＝後からONにしても復活しない
     syncMeta: {},   // {lastPushAt,lastPullAt}。表示用・常にローカル（マージ対象外）
-    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner", lastBackupAt:null, syncUrl:"" }
+    settings: { targets, coef, theme:"light", sex:"male", age:0, phase:"maintain", goal:"hypertrophy", kegelLevel:"beginner", lastBackupAt:null, syncUrl:"", cardioTargetMin:150 }
   };
 }
 function load(){
@@ -819,6 +861,7 @@ function load(){
       d.bodyweight = d.bodyweight || [];
       d.goals = d.goals || [];   // 目標設定機能：既存スキーマ非破壊で補完（2026-07-10d）
       d.templates = d.templates || [];   // 定型メニュー：既存スキーマ非破壊で補完（2026-07-11b）
+      d.cardio = Array.isArray(d.cardio) ? d.cardio : [];   // 有酸素：既存スキーマ非破壊で補完（2026-08-02f）
       d.settings = d.settings || {};
       const def = defaultDB().settings;
       d.settings.targets = Object.assign({}, def.targets, d.settings.targets||{});
@@ -832,6 +875,7 @@ function load(){
       d.settings.kegelLevel = d.settings.kegelLevel || "beginner"; // ケーゲル：レベル（既定=初級）
       if(!('lastBackupAt' in d.settings)) d.settings.lastBackupAt = null; // バックアップ日：既存スキーマ非破壊で補完（2026-07-11d）
       if(typeof d.settings.syncUrl !== 'string') d.settings.syncUrl = ""; // 端末間同期のURL（空=同期OFF・2026-08-01i）
+      if(!(typeof d.settings.cardioTargetMin==='number' && isFinite(d.settings.cardioTargetMin) && d.settings.cardioTargetMin>0)) d.settings.cardioTargetMin = 150; // 有酸素の週目標分（WHO推奨150分・2026-08-02f）
       // 端末間同期：既存スキーマ非破壊で補完（2026-08-01i）。tombは90日より古いものを刈る
       d.tomb = Array.isArray(d.tomb) ? d.tomb.filter(t=>t && t.k && t.id!=null && (Date.now()-(+t.t||0))<90*86400000) : [];
       d.syncMeta = (d.syncMeta && typeof d.syncMeta==='object' && !Array.isArray(d.syncMeta)) ? d.syncMeta : {};
@@ -869,7 +913,7 @@ function uid(){ return Math.random().toString(36).slice(2,9); }
 // mtはマージの唯一の根拠。刻印を忘れた経路は「相手の古い内容に負ける」ので、変更系は必ずここを通す。
 function stamp(o){ if(o && typeof o==='object') o.mt=Date.now(); return o; }
 function stampSettings(){ try{ DB.settings._mt=Date.now(); }catch(_){} }
-// 墓標。kは 'log'|'ex'|'bw'|'goal'|'tpl'。**exのidは種目名**（マージのキーが名前だから）
+// 墓標。kは 'log'|'ex'|'bw'|'goal'|'tpl'|'cd'（cd=有酸素）。**exのidは種目名**（マージのキーが名前だから）
 function addTomb(k, id){
   if(id==null) return;
   try{
@@ -1139,35 +1183,23 @@ function updateMuscleMap(){
   const ex=DB.exercises.find(e=>e.id===document.getElementById('rec-ex').value);
   const box=document.getElementById('muscle-map');
   if(!ex){ box.innerHTML=''; return; }
+  // GPTカード画像がある種目 → 画像だけ（人体図もトグルも出さない・2026-08-02）。
+  // 画像が無い自作種目のときだけ、代わりに人体図で対象部位を示す。
+  const exImg=(window.GALLERY&&window.GALLERY.exerciseImages||{})[ex.name];
+  if(exImg){
+    box.innerHTML=`<div class="ex-photo" id="mm-photo"><img src="${esc(exImg)}" loading="lazy" alt="${esc(ex.name)}"></div>`;
+    return;
+  }
   const {primary, secondary, tertiary}=targetsOf(ex);
   const f=k=> primary.has(k)?'var(--mt-main)':secondary.has(k)?'var(--mt-sub)':tertiary.has(k)?'var(--mt-inv)':'var(--m-none)';
-  const svg=bodySVG(f);
   const nm=set=>[...set].map(k=>partOf(k).name).join('・');
   const lg=(col,label,val)=> val?`<span class="lg"><span style="color:${col}">●</span> ${label}：<b>${val}</b></span>`:'';
-  const svgCard=`<div class="muscle-card">${svg}
+  box.innerHTML=`<div class="muscle-card">${bodySVG(f)}
     <div class="muscle-cap">
       ${lg('var(--mt-main)','メイン',nm(primary))}
       ${lg('var(--mt-sub)','サブ',nm(secondary))}
       ${lg('var(--mt-inv)','関与',nm(tertiary))}
     </div></div>`;
-  // GPTカード画像がある種目 → 画像をメイン表示・SVG人体図は隠してトグルで切替。無ければ従来どおりSVG。
-  const exImg=(window.GALLERY&&window.GALLERY.exerciseImages||{})[ex.name];
-  if(exImg){
-    box.innerHTML=
-      `<div class="ex-photo" id="mm-photo"><img src="${esc(exImg)}" loading="lazy" alt="${esc(ex.name)}"></div>`
-      +`<div id="mm-svg-wrap" style="display:none">${svgCard}</div>`
-      +`<a class="mm-toggle" id="mm-toggle" role="button" tabindex="0" onclick="toggleMuscleView()">人体図を表示</a>`;
-  } else {
-    box.innerHTML=svgCard;
-  }
-}
-function toggleMuscleView(){
-  const p=document.getElementById('mm-photo'), w=document.getElementById('mm-svg-wrap'), t=document.getElementById('mm-toggle');
-  if(!p||!w||!t) return;
-  const showSvg=w.style.display==='none';
-  w.style.display=showSvg?'':'none';
-  p.style.display=showSvg?'none':'';
-  t.textContent=showSvg?'画像を表示':'人体図を表示';
 }
 
 //=========== 記録 ===========
@@ -1304,6 +1336,7 @@ function saveLog(){
   else toast('記録しました');
 }
 function renderTodayLogs(){
+  renderCardioToday();   // 有酸素カードも同じ日付で描き直す（この関数が記録タブ更新の共通経路）
   const date=document.getElementById('rec-date').value||todayStr();
   const logs=DB.logs.filter(l=>l.date===date);
   const box=document.getElementById('today-logs');
@@ -2337,6 +2370,334 @@ function renderHeatChips(rateOf){
     return `<button class="partchip" onclick="showMuscleDetail('${p.key}')"><span class="sw" style="background:${si.col}"></span>${p.name}<span class="muted" style="font-size:10.5px;font-weight:500">${si.label}</span></button>`;
   }).join('');
 }
+//=========== サブ部位内訳（部位ドリルダウン・2026-08-02g） ===========
+// 設計: ドキュメント/設計書_サブ部位内訳_2026-08-02.md
+// 方針: サブ部位は「部位」に昇格させない＝PARTS・週目標・レーダー・同期・DBスキーマは一切不変。
+//       部位詳細モーダルの表示時にだけ再集計する（computeStats/metricValsには触らない）。
+//       SUB_MAPに無い種目（ユーザー自作種目など）は消さずに 'other'（その他）バケツへ入れるので、
+//       サブの合計は必ず部位合計（週セット数の元になる負荷量）と一致する。
+const SUB_PARTS = {
+  chest:   [ {key:'upper',name:'大胸筋上部'}, {key:'mid',name:'大胸筋(中・下部)'} ],
+  back:    [ {key:'lat',name:'広背筋'}, {key:'trap',name:'僧帽筋'}, {key:'erector',name:'脊柱起立筋'} ],
+  shoulder:[ {key:'front',name:'三角筋前部'}, {key:'side',name:'三角筋中部'}, {key:'rear',name:'三角筋後部'} ],
+  biceps:  [ {key:'bi',name:'上腕二頭筋'}, {key:'forearm',name:'前腕'} ],
+  triceps: [ {key:'tri',name:'上腕三頭筋'} ],                         // 単一（長頭/外側頭には分けない）
+  legs:    [ {key:'quad',name:'大腿四頭筋'}, {key:'ham',name:'ハムストリングス'},
+             {key:'glute',name:'大殿筋'}, {key:'adductor',name:'内転筋'}, {key:'calf',name:'カーフ'} ],
+  core:    [ {key:'abs',name:'腹直筋'}, {key:'oblique',name:'腹斜筋'},
+             {key:'hipflex',name:'腸腰筋'}, {key:'deep',name:'深層(腹横筋・骨盤底)'} ],
+};
+const SUB_OTHER_NAME='その他(未分類)';
+// 種目名 → { 部位key: {サブkey:重み,…} }。重みは部位ごとに合計1.0（0.1刻み）。
+// 対象部位は loadFactors() が返す部位（＝part＋sec、LOAD_OVERRIDEがあればそのキー）と一致させる。
+// 生成ソース＝①カード台帳 ドキュメント/新種目プロンプト_2026-07-20.md の凡例(赤/橙/青)
+//             ②index.htmlのSECONDARY/TERTIARY/LOAD_OVERRIDE ③標準的な運動解剖学
+const SUB_MAP = {
+  //--- 胸(chest) 25種 ---
+  "ベンチプレス(フラット)":            { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "ベンチプレス(パーシャル)":          { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "インクラインベンチプレス(30°)":     { chest:{upper:.7, mid:.3}, shoulder:{front:1}, triceps:{tri:1} },
+  "インクラインベンチプレス(45°)":     { chest:{upper:.8, mid:.2}, shoulder:{front:1}, triceps:{tri:1} },
+  "インクラインベンチプレス(60°)":     { chest:{upper:.9, mid:.1}, shoulder:{front:1}, triceps:{tri:1} },
+  "デクラインベンチプレス":            { chest:{mid:1}, triceps:{tri:1} },
+  "ダンベルプレス":                    { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "インクラインダンベルプレス":        { chest:{upper:.8, mid:.2}, shoulder:{front:1}, triceps:{tri:1} },
+  "ダンベルフライ":                    { chest:{mid:1} },
+  "インクラインダンベルフライ":        { chest:{upper:.8, mid:.2} },
+  "チェストプレス(マシン)":            { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "ペックフライ(マシン)":              { chest:{mid:1} },
+  "ケーブルクロスオーバー":            { chest:{mid:1} },
+  "腕立て伏せ":                        { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1}, core:{deep:.6, abs:.4} },
+  "ディップス(胸)":                    { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "スミスマシンベンチプレス":          { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "デクラインプッシュアップ":          { chest:{upper:.7, mid:.3}, shoulder:{front:1}, triceps:{tri:1} },  // 足を高くする＝上部胸
+  "ヒンズープッシュアップ":            { chest:{mid:1}, shoulder:{front:1}, triceps:{tri:1} },
+  "フロアプレス":                      { chest:{mid:1}, triceps:{tri:1}, shoulder:{front:1} },
+  "ストレートアームケーブルフライ":    { chest:{mid:1}, shoulder:{front:1}, biceps:{bi:1} },
+  "アンイーブンプッシュアップ":        { chest:{mid:1}, triceps:{tri:1}, core:{abs:.5, oblique:.5} },
+  "ワンアームプッシュアップ":          { chest:{mid:1}, triceps:{tri:1}, core:{oblique:.6, abs:.4} },
+  "ワイドグリップベンチプレス":        { chest:{mid:1}, shoulder:{front:1}, triceps:{tri:1} },
+  "マシンチェストプレス(片手)":        { chest:{mid:1}, triceps:{tri:1}, core:{oblique:.6, abs:.4} },
+  "アーチャープッシュアップ":          { chest:{mid:1}, triceps:{tri:1}, core:{oblique:.5, abs:.5} },
+
+  //--- 背中(back) 36種 ---
+  "デッドリフト(コンベンショナル)":    { back:{erector:.6, lat:.2, trap:.2}, legs:{ham:.4, glute:.4, quad:.2}, core:{deep:.6, abs:.4}, biceps:{forearm:1} },
+  "デッドリフト(スモウ)":              { back:{erector:.6, lat:.2, trap:.2}, legs:{quad:.3, glute:.3, adductor:.2, ham:.2}, core:{deep:.6, abs:.4}, biceps:{forearm:1} },
+  "懸垂(チンニング)":                  { back:{lat:.8, trap:.2}, biceps:{bi:.7, forearm:.3}, core:{abs:.6, deep:.4} },
+  "ラットプルダウン":                  { back:{lat:.8, trap:.2}, biceps:{bi:.7, forearm:.3} },
+  "ビハインドネックプルダウン":        { back:{lat:.7, trap:.3}, biceps:{bi:.7, forearm:.3} },
+  "ベントオーバーロウ":                { back:{lat:.6, trap:.2, erector:.2}, biceps:{bi:.7, forearm:.3} },
+  "シーテッドロウ":                    { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "ワンハンドダンベルロウ":            { back:{lat:.7, trap:.3}, biceps:{bi:.7, forearm:.3} },
+  "Tバーロウ":                         { back:{lat:.6, trap:.3, erector:.1}, biceps:{bi:.7, forearm:.3} },
+  "バックエクステンション":            { back:{erector:1}, legs:{glute:.5, ham:.5} },
+  "プルオーバー":                      { back:{lat:1}, chest:{mid:1} },
+  "シュラッグ(僧帽筋)":                { back:{trap:1} },
+  "ハイロウ(マシン)":                  { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "アシストチンニング(マシン)":        { back:{lat:.8, trap:.2}, biceps:{bi:.7, forearm:.3} },
+  "スイミング":                        { back:{erector:1}, legs:{glute:1} },
+  "スワン":                            { back:{erector:1}, core:{deep:.6, abs:.4} },
+  "キャット&カウ":                     { back:{erector:1}, core:{deep:1} },
+  "バードドッグ":                      { back:{erector:1}, core:{deep:.6, abs:.4} },
+  "パワークリーン":                    { back:{trap:.4, erector:.4, lat:.2}, legs:{quad:.4, glute:.3, ham:.3}, shoulder:{front:.7, side:.3}, core:{deep:.6, abs:.4} },
+  "斜め懸垂":                          { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "ファーマーズウォーク":              { back:{trap:.8, erector:.2}, biceps:{forearm:1}, core:{oblique:.6, deep:.4}, legs:{quad:.5, calf:.5} },
+  "ストレートアームプルダウン":        { back:{lat:1}, triceps:{tri:1} },
+  "ペンドレイロウ":                    { back:{lat:.6, trap:.3, erector:.1}, biceps:{bi:.7, forearm:.3} },
+  "ラックプル":                        { back:{trap:.4, erector:.4, lat:.2}, legs:{glute:.5, ham:.5}, biceps:{forearm:1} },
+  "シールロウ":                        { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "スーパーマン":                      { back:{erector:.8, trap:.2}, legs:{glute:1} },
+  "ランドマインロウ":                  { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "ジェファーソンカール":              { back:{erector:1}, legs:{ham:.6, glute:.4} },
+  "レネゲードロウ":                    { back:{lat:.7, trap:.3}, core:{abs:.5, oblique:.5}, biceps:{bi:.7, forearm:.3}, chest:{mid:1}, triceps:{tri:1} },
+  "インクラインシュラッグ":            { back:{trap:.8, lat:.2}, shoulder:{rear:1} },
+  "スパインローイング":                { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "ケトルベルクリーン":                { back:{trap:.5, erector:.4, lat:.1}, legs:{glute:.4, ham:.4, quad:.2}, biceps:{forearm:1} },
+  "ワンハンドケーブルロウ":            { back:{lat:.7, trap:.3}, biceps:{bi:.7, forearm:.3} },
+  "チェストサポーテッドロウ":          { back:{lat:.5, trap:.5}, shoulder:{rear:1} },
+  "インクラインベンチロウ":            { back:{lat:.6, trap:.4}, biceps:{bi:.7, forearm:.3} },
+  "メディシンボールスラム":            { back:{lat:.7, trap:.3}, core:{abs:.7, oblique:.3}, shoulder:{front:.7, side:.3} },
+
+  //--- 肩(shoulder) 30種 ---
+  "ショルダープレス(スタンディング)":         { shoulder:{front:.7, side:.3}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
+  "ショルダープレス(シーテッド)":             { shoulder:{front:.7, side:.3}, triceps:{tri:1} },
+  "ダンベルショルダープレス(スタンディング)": { shoulder:{front:.6, side:.4}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
+  "ダンベルショルダープレス(シーテッド)":     { shoulder:{front:.6, side:.4}, triceps:{tri:1} },
+  "アーノルドプレス":                  { shoulder:{front:.6, side:.4}, triceps:{tri:1} },
+  "サイドレイズ(スタンディング)":      { shoulder:{side:1} },
+  "サイドレイズ(シーテッド)":          { shoulder:{side:1} },
+  "フロントレイズ":                    { shoulder:{front:1} },
+  "リアレイズ":                        { shoulder:{rear:1} },
+  "リアデルトフライ(マシン)":          { shoulder:{rear:1} },
+  "アップライトロウ":                  { shoulder:{side:.7, front:.3}, biceps:{bi:.6, forearm:.4} },
+  "フェイスプル":                      { shoulder:{rear:1}, back:{trap:1} },
+  "プッシュプレス":                    { shoulder:{front:.7, side:.3}, triceps:{tri:1}, legs:{quad:.6, glute:.4} },
+  "パイクプッシュアップ":              { shoulder:{front:.7, side:.3}, triceps:{tri:1}, back:{trap:1} },
+  "ランドマインプレス":                { shoulder:{front:.8, side:.2}, chest:{upper:.7, mid:.3}, triceps:{tri:1} },
+  "ケーブルサイドレイズ":              { shoulder:{side:1}, back:{trap:1}, biceps:{forearm:1} },
+  "バトルロープ":                      { shoulder:{front:.5, side:.5}, biceps:{forearm:1}, core:{abs:.6, deep:.4} },
+  "ボトムズアップケトルベルプレス":    { shoulder:{front:.6, side:.4}, triceps:{tri:1}, back:{trap:1} },
+  "スコットプレス":                    { shoulder:{side:.6, front:.4}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
+  "ターキッシュゲットアップ":          { shoulder:{front:.5, side:.5}, core:{oblique:.4, deep:.3, abs:.3}, legs:{quad:.5, glute:.5} },
+  "リバースペックデッキ":              { shoulder:{rear:1}, back:{trap:.7, lat:.3} },
+  "スミスマシンショルダープレス":      { shoulder:{front:.7, side:.3}, triceps:{tri:1}, back:{trap:1} },
+  "マシンショルダープレス":            { shoulder:{front:.7, side:.3}, triceps:{tri:1}, chest:{upper:1} },
+  "ケーブルリアデルトロウ":            { shoulder:{rear:1}, back:{trap:.6, lat:.4}, biceps:{bi:.7, forearm:.3} },
+  "ダンベルZプレス":                   { shoulder:{front:.6, side:.4}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
+  "Yレイズ":                           { shoulder:{rear:.6, side:.4}, back:{trap:1} },
+  "マシンリアデルト":                  { shoulder:{rear:1}, back:{trap:1} },
+  "ケーブルワンハンドサイドレイズ":    { shoulder:{side:1}, back:{trap:1}, core:{oblique:.6, deep:.4} },
+  "ハーフニーリングプレス":            { shoulder:{front:.7, side:.3}, triceps:{tri:1}, core:{deep:.5, oblique:.5} },
+  "マシンサイドレイズ":                { shoulder:{side:1}, back:{trap:1} },
+
+  //--- 二頭・前腕(biceps) 20種 ---
+  "バーベルカール(スタンディング)":    { biceps:{bi:.8, forearm:.2} },
+  "バーベルカール(シーテッド)":        { biceps:{bi:.8, forearm:.2} },
+  "ダンベルカール(スタンディング)":    { biceps:{bi:.8, forearm:.2} },
+  "ダンベルカール(シーテッド)":        { biceps:{bi:.8, forearm:.2} },
+  "ハンマーカール(スタンディング)":    { biceps:{bi:.6, forearm:.4} },
+  "ハンマーカール(シーテッド)":        { biceps:{bi:.6, forearm:.4} },
+  "インクラインダンベルカール":        { biceps:{bi:.8, forearm:.2} },
+  "コンセントレーションカール":        { biceps:{bi:.9, forearm:.1} },
+  "プリーチャーカール":                { biceps:{bi:.9, forearm:.1} },
+  "ケーブルカール":                    { biceps:{bi:.7, forearm:.3} },
+  "リストカール":                      { biceps:{forearm:1} },
+  "リバースリストカール":              { biceps:{forearm:1} },
+  "リバースカール":                    { biceps:{forearm:.7, bi:.3} },   // 台帳の凡例＝赤:腕橈骨筋/橙:前腕伸筋群/青:上腕二頭筋
+  "ゾットマンカール":                  { biceps:{bi:.5, forearm:.5} },
+  "スパイダーカール":                  { biceps:{bi:.9, forearm:.1}, shoulder:{front:1} },
+  "ドラッグカール":                    { biceps:{bi:.9, forearm:.1} },
+  "ケーブルハンマーカール":            { biceps:{bi:.6, forearm:.4} },
+  "クロスボディハンマーカール":        { biceps:{bi:.6, forearm:.4} },
+  "チンアップ(逆手懸垂)":              { biceps:{bi:.8, forearm:.2}, back:{lat:.8, trap:.2} },
+  "ケーブルストレートバーカール":      { biceps:{bi:.8, forearm:.2} },
+
+  //--- 三頭(triceps) 15種（tricepsは単一サブ） ---
+  "トライセプスエクステンション":      { triceps:{tri:1} },
+  "フレンチプレス":                    { triceps:{tri:1} },
+  "プレスダウン":                      { triceps:{tri:1} },
+  "ナローベンチプレス":                { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "ディップス(三頭)":                  { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "キックバック":                      { triceps:{tri:1} },
+  "ライイングエクステンション":        { triceps:{tri:1} },
+  "ダイヤモンドプッシュアップ":        { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "ベンチディップス":                  { triceps:{tri:1}, shoulder:{front:1}, chest:{mid:1} },
+  "ケーブルキックバック":              { triceps:{tri:1}, shoulder:{rear:1}, back:{lat:1} },
+  "テイトプレス":                      { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "JMプレス":                          { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "パラレルバーディップス":            { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
+  "クラブウォーク":                    { triceps:{tri:1}, legs:{glute:.6, ham:.4}, core:{deep:.6, abs:.4} },
+  "ケーブルオーバーヘッドエクステンション": { triceps:{tri:1}, shoulder:{front:1}, core:{deep:.6, abs:.4} },
+
+  //--- 脚(legs) 71種 ---
+  "バーベルスクワット(パラレル)":      { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.6, abs:.4}, back:{erector:1} },
+  "バーベルスクワット(フル)":          { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.6, abs:.4}, back:{erector:1} },
+  "バーベルスクワット(フルボトム)":    { legs:{quad:.4, glute:.3, adductor:.2, ham:.1}, core:{deep:.6, abs:.4}, back:{erector:1} },
+  "バーベルスクワット(ハーフ)":        { legs:{quad:.6, glute:.3, ham:.1}, core:{deep:.6, abs:.4} },
+  "バーベルスクワット(クォーター)":    { legs:{quad:.7, glute:.3}, core:{deep:.6, abs:.4} },
+  "フロントスクワット":                { legs:{quad:.6, glute:.3, ham:.1}, core:{deep:.6, abs:.4} },
+  "レッグプレス":                      { legs:{quad:.6, glute:.3, ham:.1}, core:{deep:1} },
+  "レッグエクステンション":            { legs:{quad:1} },
+  "レッグカール":                      { legs:{ham:1} },
+  "ブルガリアンスクワット":            { legs:{quad:.4, glute:.4, ham:.2}, core:{deep:.6, abs:.4} },
+  "ランジ":                            { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.6, abs:.4} },
+  "ルーマニアンデッドリフト":          { legs:{ham:.6, glute:.4}, back:{erector:1}, core:{deep:.6, abs:.4}, biceps:{forearm:1} },
+  "ヒップスラスト":                    { legs:{glute:.7, ham:.3}, core:{deep:.6, abs:.4} },
+  "カーフレイズ(スタンディング)":      { legs:{calf:1} },
+  "カーフレイズ(シーテッド)":          { legs:{calf:1} },
+  "アダクション(内転)":                { legs:{adductor:1} },
+  "アブダクション(外転)":              { legs:{glute:1} },
+  "ハックスクワット":                  { legs:{quad:.7, glute:.2, ham:.1}, core:{deep:1} },
+  "スミスマシンスクワット":            { legs:{quad:.5, glute:.3, adductor:.2}, core:{deep:.6, abs:.4} },
+  "ヒップリフト(ヒップブリッジ)":      { legs:{glute:.7, ham:.3}, core:{deep:.6, abs:.4} },
+  "ワイドスクワット(相撲)":            { legs:{adductor:.4, quad:.3, glute:.3}, core:{deep:.6, abs:.4} },
+  "スプリットスクワット":              { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.6, abs:.4} },
+  "内転筋トレ(アダクション)":          { legs:{adductor:1} },
+  "バックキック(臀部)":                { legs:{glute:.8, ham:.2}, core:{deep:.6, abs:.4} },
+  "サイドキック":                      { legs:{glute:.7, adductor:.3}, core:{oblique:.6, deep:.4} },
+  "ショルダーブリッジ":                { legs:{glute:.7, ham:.3}, core:{deep:.6, abs:.4} },
+  "クラムシェル":                      { legs:{glute:1} },
+  "グッドモーニング":                  { legs:{ham:.7, glute:.3}, back:{erector:1} },
+  "ケトルベルスイング":                { legs:{glute:.5, ham:.5}, back:{erector:1}, core:{deep:.6, abs:.4}, shoulder:{front:.6, side:.4} },
+  "バーピー":                          { legs:{quad:.5, glute:.3, calf:.2}, chest:{mid:1}, core:{abs:.6, deep:.4}, shoulder:{front:1}, triceps:{tri:1} },
+  "ゴブレットスクワット":              { legs:{quad:.5, glute:.3, adductor:.2} },
+  "ステップアップ":                    { legs:{quad:.5, glute:.4, ham:.1} },
+  "サイドランジ":                      { legs:{adductor:.4, quad:.3, glute:.3} },
+  "ノルディックハムカール":            { legs:{ham:.8, glute:.2}, back:{erector:1} },
+  "ピストルスクワット":                { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.5, abs:.5} },
+  "ジャンプスクワット":                { legs:{quad:.5, glute:.3, calf:.2} },
+  "ボックスジャンプ":                  { legs:{quad:.4, glute:.3, calf:.3} },
+  "スラスター":                        { legs:{quad:.6, glute:.4}, shoulder:{front:.7, side:.3}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
+  "ダンベルスナッチ":                  { legs:{quad:.4, glute:.4, ham:.2}, shoulder:{front:.5, side:.5}, back:{trap:.6, erector:.4} },
+  "ケーブルプルスルー":                { legs:{glute:.6, ham:.4}, back:{erector:1} },
+  "シシースクワット":                  { legs:{quad:.9, calf:.1}, core:{abs:.6, deep:.4} },   // 台帳の凡例＝赤:前もも/橙:腹/青:ふくらはぎ
+  "シングルレッグルーマニアンデッドリフト": { legs:{ham:.6, glute:.4}, back:{erector:1} },
+  "コサックスクワット":                { legs:{adductor:.4, quad:.3, glute:.3} },
+  "オーバーヘッドスクワット":          { legs:{quad:.5, glute:.3, ham:.2}, shoulder:{front:.5, side:.5}, back:{erector:.6, trap:.4}, core:{deep:.6, abs:.4} },
+  "ジャンピングランジ":                { legs:{quad:.5, glute:.3, calf:.2} },
+  "グルートブリッジマーチ":            { legs:{glute:.7, ham:.3}, core:{abs:.6, deep:.4} },
+  "コペンハーゲンプランク":            { legs:{adductor:1}, core:{oblique:.6, deep:.4} },
+  "シュリンプスクワット":              { legs:{quad:.6, glute:.3, ham:.1} },
+  "フロッグポンプ":                    { legs:{glute:.6, ham:.2, adductor:.2} },
+  "スケーターホップ":                  { legs:{glute:.6, quad:.4}, core:{oblique:.6, deep:.4} },
+  "カーフジャンプ":                    { legs:{calf:1} },
+  "グルートハムレイズ":                { legs:{ham:.7, glute:.3} },
+  "ジェファーソンスクワット":          { legs:{quad:.4, adductor:.3, glute:.3} },
+  "ハックリフト":                      { legs:{quad:.5, glute:.3, ham:.2}, back:{erector:1} },
+  "リバースハイパー":                  { legs:{glute:.6, ham:.4}, back:{erector:1} },
+  "ドンキーカーフレイズ":              { legs:{calf:1} },
+  "ヒップアブダクション(サイドライイング)": { legs:{glute:1}, core:{oblique:.6, deep:.4} },
+  "ベアハグスクワット":                { legs:{quad:.5, glute:.3, ham:.2}, core:{deep:.6, abs:.4} },
+  "ヒップシフトスクワット":            { legs:{glute:.6, quad:.4} },
+  "ペンドラムスクワット":              { legs:{quad:.6, glute:.3, ham:.1} },
+  "シーテッドカーフレイズマシン":      { legs:{calf:1} },
+  "ヒップアダクションマシン":          { legs:{adductor:1}, core:{deep:1} },
+  "ベルトスクワット":                  { legs:{quad:.6, glute:.3, ham:.1} },
+  "ヒップヒンジ":                      { legs:{ham:.6, glute:.4}, back:{erector:1} },
+  "ヒールエレベーテッドスクワット":    { legs:{quad:.7, glute:.2, ham:.1} },
+  "ステップダウン":                    { legs:{quad:.5, glute:.3, calf:.2} },
+  "カーフプレス":                      { legs:{calf:1} },
+  "ケーブルヒップエクステンション":    { legs:{glute:.7, ham:.3}, back:{erector:1} },
+  "スタンディングアブダクション":      { legs:{glute:1}, back:{erector:1} },
+  "ワンレッグヒップリフト":            { legs:{glute:.7, ham:.3}, core:{deep:.5, oblique:.5} },
+  "スミスマシンカーフレイズ":          { legs:{calf:1} },
+
+  //--- 体幹/腹(core) 43種 ---
+  "クランチ":                          { core:{abs:1} },
+  "シットアップ":                      { core:{abs:.7, hipflex:.3} },
+  "レッグレイズ":                      { core:{abs:.6, hipflex:.4} },
+  "ハンギングレッグレイズ":            { core:{abs:.6, hipflex:.4} },
+  "プランク":                          { core:{deep:.6, abs:.4}, shoulder:{front:1} },
+  "サイドプランク":                    { core:{oblique:.6, deep:.4} },
+  "アブローラー":                      { core:{abs:.7, deep:.3} },
+  "ロシアンツイスト":                  { core:{oblique:.7, abs:.3} },
+  "ケーブルクランチ":                  { core:{abs:1} },
+  "ロータリートルソー":                { core:{oblique:1} },
+  "アブクランチ(マシン)":              { core:{abs:1} },
+  "肛門開閉(骨盤底筋)":                { core:{deep:1} },
+  "ドローイン":                        { core:{deep:1} },
+  "ハンドレッド":                      { core:{abs:.6, deep:.4} },
+  "ロールアップ":                      { core:{abs:.7, deep:.3} },
+  "ロールオーバー":                    { core:{abs:.6, hipflex:.4} },
+  "シングルレッグストレッチ":          { core:{abs:.6, deep:.4}, legs:{quad:.6, ham:.4} },
+  "ダブルレッグストレッチ":            { core:{abs:.6, deep:.4} },
+  "ティーザー":                        { core:{abs:.6, hipflex:.4}, legs:{quad:1} },
+  "レッグサークル":                    { core:{hipflex:.5, deep:.5}, legs:{quad:.5, adductor:.5} },
+  "マウンテンクライマー":              { core:{abs:.6, hipflex:.4}, legs:{quad:.6, glute:.4}, shoulder:{front:1}, chest:{mid:1} },
+  "デッドバグ":                        { core:{deep:.6, abs:.4}, legs:{quad:.6, glute:.4} },
+  "パロフプレス":                      { core:{oblique:.7, abs:.3}, shoulder:{front:1} },
+  "ケーブルウッドチョップ":            { core:{oblique:.7, abs:.3}, shoulder:{front:1}, legs:{quad:.5, glute:.5} },
+  "バイシクルクランチ":                { core:{oblique:.6, abs:.4}, legs:{quad:1} },
+  "サイドベント":                      { core:{oblique:1}, back:{erector:.5, lat:.5} },
+  "ドラゴンフラッグ":                  { core:{abs:.7, deep:.3}, legs:{quad:.6, glute:.4} },
+  "ホローボディホールド":              { core:{abs:.6, hipflex:.4}, legs:{quad:1} },
+  "Vシットアップ":                     { core:{abs:.6, hipflex:.4}, legs:{quad:1} },
+  "ウィンドシールドワイパー":          { core:{oblique:.7, abs:.3}, legs:{quad:.6, ham:.4} },
+  "ベアクロール":                      { core:{deep:.5, abs:.5}, shoulder:{front:1}, legs:{quad:.6, glute:.4} },
+  "ジャックナイフ":                    { core:{abs:.6, hipflex:.4}, legs:{quad:1} },
+  "トウタッチクランチ":                { core:{abs:1}, legs:{quad:1} },
+  "デクラインクランチ":                { core:{abs:.8, hipflex:.2}, legs:{quad:1} },
+  "トウズトゥバー":                    { core:{abs:.6, hipflex:.4}, back:{lat:1}, biceps:{forearm:1} },
+  "リバースクランチ":                  { core:{abs:.7, hipflex:.3}, legs:{quad:1} },
+  "ケトルベルウィンドミル":            { core:{oblique:.7, deep:.3}, shoulder:{front:.5, side:.5}, legs:{ham:.6, glute:.4} },
+  "ランドマインツイスト":              { core:{oblique:.7, abs:.3}, shoulder:{front:.6, side:.4} },
+  "スパインプレス":                    { core:{abs:.6, deep:.4}, shoulder:{front:1}, chest:{mid:1} },
+  "ニートゥチェスト":                  { core:{abs:.6, hipflex:.4}, legs:{quad:1} },
+  "Lシット":                           { core:{hipflex:.5, abs:.5}, legs:{quad:1}, triceps:{tri:1} },
+  "ハンギングニーレイズ":              { core:{abs:.6, hipflex:.4}, legs:{quad:1}, back:{lat:1} },
+  "スーツケースキャリー":              { core:{oblique:.6, deep:.4}, back:{trap:.7, erector:.3}, biceps:{forearm:1} },
+};
+// 期間内ログを、その部位に係る種目だけ拾ってサブ部位へ配分する（表示専用の再集計）。
+// 配分の単位は computeStats() と同じ「部位係数 × セット数」。合計は必ず sets[part] と一致する。
+function subBreakdown(partKey){
+  const defs=SUB_PARTS[partKey]||[];
+  const amt={}, byEx={};
+  defs.forEach(s=>{ amt[s.key]=0; byEx[s.key]={}; });
+  amt.other=0; byEx.other={};
+  let total=0;
+  logsInPeriod().forEach(l=>{
+    const ex=DB.exercises.find(e=>e.id===l.exId); if(!ex) return;
+    const c=loadFactors(ex)[partKey]; if(!c) return;
+    const n=(l.sets||[]).length; if(!n) return;
+    const load=c*n; total+=load;
+    const put=(k,v)=>{ const kk=(amt[k]===undefined)?'other':k; amt[kk]+=v; byEx[kk][ex.name]=(byEx[kk][ex.name]||0)+v; };
+    const w=(SUB_MAP[ex.name]||{})[partKey];
+    if(w) Object.keys(w).forEach(k=>put(k, load*w[k]));
+    else   put('other', load);   // 自作種目など未割当はここ（消さない＝合計が部位合計と一致する）
+  });
+  const top=m=>Object.keys(m).sort((a,b)=>m[b]-m[a]).slice(0,2);
+  const rows=defs.map(s=>({key:s.key, name:s.name, val:amt[s.key], top:top(byEx[s.key])}));
+  if(amt.other>1e-9) rows.push({key:'other', name:SUB_OTHER_NAME, val:amt.other, top:top(byEx.other)});
+  rows.sort((a,b)=>b.val-a.val);
+  return {rows, total, amt};
+}
+// §4 比率フラグ（2つだけ・しきい値は目安）。該当部位のモーダル内にのみ出す。
+function subRatioFlagHTML(partKey, amt){
+  let body='';
+  if(partKey==='legs'){
+    const q=amt.quad||0, post=(amt.ham||0)+(amt.glute||0);
+    if(q>0 && q>post*2) body='<b>後面(ハム・尻)が不足気味</b> ／ 四頭筋が後面の2倍を超えています。膝のためにヒンジ系(ルーマニアンデッドリフト・ヒップスラスト)を足しましょう。<span class="sub-note-in">※2倍は目安です</span>';
+  }else if(partKey==='shoulder'){
+    const f=amt.front||0, r=amt.rear||0;
+    if(f>0 && f>r*2) body='<b>後部が不足気味</b> ／ 三角筋前部が後部の2倍を超えています。巻き肩予防にリア系(フェイスプル・リアレイズ)を足しましょう。<span class="sub-note-in">※2倍は目安です</span>';
+  }
+  return body ? `<div class="flag warn mt">${ic('triangle-alert')}<span>${body}</span></div>` : '';
+}
+function subBreakdownHTML(partKey, color){
+  const {rows, total, amt}=subBreakdown(partKey);
+  if(total<=1e-9) return '';
+  const bars=rows.filter(r=>r.val>1e-9).map(r=>{
+    const pct=total>0 ? r.val/total*100 : 0;
+    const tops=r.top.length ? `<div class="sub-top">${r.top.map(esc).join('・')}</div>` : '';
+    const col=r.key==='other' ? 'var(--sub)' : color;
+    return `<div class="bar-wrap sub-bar"><div class="bar-head"><span>${esc(r.name)}</span><span class="muted">${Math.round(pct)}%</span></div>`+
+      `<div class="bar-bg"><div class="bar-fill" style="width:${pct.toFixed(1)}%;background:${col}"></div></div>${tops}</div>`;
+  }).join('');
+  const otherNote = rows.some(r=>r.key==='other') ? `灰色の「${SUB_OTHER_NAME}」は配分表に無い自作種目ぶんです。` : '';
+  return `<div class="sub-sec mt"><div class="sub-sec-h">内訳（サブ部位）</div>${bars}`+
+    subRatioFlagHTML(partKey, amt)+
+    `<p class="note">この部位の負荷量（部位係数×セット数）を種目ごとの筋肉配分で割り振った目安です。${otherNote}サブ部位には目標値はありません。</p></div>`;
+}
 function showMuscleDetail(key){
   if(!lastMap){ return; }
   const p=partOf(key), s=lastMap;
@@ -2355,6 +2716,7 @@ function showMuscleDetail(key){
     </div>
     <div class="bar-wrap mt"><div class="bar-head"><span>達成度</span><span class="muted">${pw.toFixed(1)} / ${tgt} セット</span></div>
       <div class="bar-bg"><div class="bar-fill" style="width:${Math.min(rate/1.6*100,100).toFixed(0)}%;background:${si.col}"></div><div class="bar-target" style="left:${(1/1.6*100).toFixed(0)}%"></div></div></div>
+    ${subBreakdownHTML(key, p.color)}
     <p class="note">白線＝目標セット。緑（適正）を目安に、不足している部位から優先的に鍛えましょう。期間は上部の切替で変更できます。</p>
     <button class="btn mt" onclick="closeModal()">閉じる</button>`);
   refreshIcons();
@@ -2395,6 +2757,7 @@ function renderBalance(){
     return `<div class="bar-wrap"><div class="bar-head"><span>${p.name}</span><span class="muted">${perWeek.toFixed(1)} / 目標${tgt} セット/週</span></div>
       <div class="bar-bg"><div class="bar-fill" style="width:${w}%;background:${col}"></div><div class="bar-target" style="left:${tx}%"></div></div></div>`;
   }).join('');
+  renderCardioWeek();   // 有酸素（独立カード。上の集計には一切入っていない）
   renderDiagnosis(adjVol, sets, weeks);
   renderAdvice(); // 機能B（lastMapを利用・直前で設定済み）
   renderTrend(); renderCalendar(); renderPR();
@@ -2495,11 +2858,21 @@ function renderHistory(){
     <div class="s"><div class="v">${totalSets}</div><div class="l">総セット</div></div>
     <div class="s"><div class="v">${fmt(totalVol/1000)}t</div><div class="l">総挙上量</div></div>`;
   const box=document.getElementById('history');
-  if(DB.logs.length===0){ box.innerHTML='<div class="empty">まだ記録がありません</div>'; return; }
+  // 有酸素（2026-08-02f）＝同じ日付リストに🫀行として混ぜる。上のサマリーには入れない（筋トレの数字を汚さない）
+  const cdByDate={}; cardioList().forEach(c=>{ if(c && c.date) (cdByDate[c.date]=cdByDate[c.date]||[]).push(c); });
+  if(DB.logs.length===0 && !Object.keys(cdByDate).length){ box.innerHTML='<div class="empty">まだ記録がありません</div>'; return; }
   const byDate={}; DB.logs.forEach(l=>{ (byDate[l.date]=byDate[l.date]||[]).push(l); });
-  box.innerHTML=Object.keys(byDate).sort().reverse().map(d=>{
-    const dayVol=byDate[d].reduce((a,l)=>a+l.sets.reduce((x,s)=>x+s.weight*s.reps,0),0);
-    const items=byDate[d].map(l=>{
+  const allDates=Array.from(new Set(Object.keys(byDate).concat(Object.keys(cdByDate))));
+  box.innerHTML=allDates.sort().reverse().map(d=>{
+    const dayLogs=byDate[d]||[], dayCd=cdByDate[d]||[];
+    const dayVol=dayLogs.reduce((a,l)=>a+l.sets.reduce((x,s)=>x+s.weight*s.reps,0),0);
+    const cdMin=dayCd.reduce((a,c)=>a+(+c.min||0),0);
+    const head=(dayLogs.length? '合計 '+fmt(dayVol)+'kg' : '')+(dayCd.length? (dayLogs.length?' ・ ':'')+'🫀'+cdMin+'分' : '');
+    const cdItems=dayCd.map(c=>`<div class="ex-item">
+      <span class="chip cd-chip">🫀</span>
+      <div class="nm"><b>${esc(cardioKindName(c.kind))} ${(+c.min||0)}分</b><br><span class="muted">${esc((c.hr?'平均'+c.hr+'bpm':'心拍—')+(c.src==='garmin'?' ・ Garmin':'')+(c.memo?' ・ '+c.memo:''))}</span></div>
+      <button class="x" onclick="delCardioHist('${c.id}')">${ic('x')}</button></div>`).join('');
+    const items=dayLogs.map(l=>{
       const ex=DB.exercises.find(e=>e.id===l.exId)||{name:"(削除済)",part:"core"}; const p=partOf(ex.part);
       const vol=l.sets.reduce((s,x)=>s+x.weight*x.reps,0);
       const setsTxt=l.sets.map(s=>`${s.weight||'-'}×${s.reps}`).join(' / ');
@@ -2509,8 +2882,215 @@ function renderHistory(){
         <button class="star" onclick="editLog('${l.id}')">${ic('pencil')}</button>
         <button class="x" onclick="delLogHist('${l.id}')">${ic('x')}</button></div>`;
     }).join('');
-    return `<div class="log-day"><div class="d">${d} <span class="muted">合計 ${fmt(dayVol)}kg</span></div>${items}</div>`;
+    return `<div class="log-day"><div class="d">${d} <span class="muted">${head}</span></div>${items}${cdItems}</div>`;
   }).join('');
+  refreshIcons();
+}
+
+//=========== 🫀 有酸素（2026-08-02f） ===========
+// 設計: ドキュメント/設計書_有酸素とGarmin取込_2026-08-02.md
+// 大原則: DB.cardio は筋トレとは**別コレクション**。部位レーダー・週セット数・筋力レベル判定・負荷係数には
+//         一切算入しない（あれらは全部「重量×回数」前提のロジックなので、有酸素を混ぜると全部が汚れる）。
+const CARDIO_KINDS={walk:'ウォーキング', run:'ランニング', bike:'バイク', swim:'水泳', hike:'ハイキング', stair:'階段', other:'その他'};
+const CARDIO_TARGET_DEFAULT=150;   // WHO推奨（中強度150分/週）
+function cardioKindName(k){ return CARDIO_KINDS[k] || 'その他'; }
+function cardioTarget(){ const t=+(DB.settings && DB.settings.cardioTargetMin); return (isFinite(t)&&t>0)? t : CARDIO_TARGET_DEFAULT; }
+function cardioList(){ return Array.isArray(DB.cardio)? DB.cardio : (DB.cardio=[]); }
+function setCardioTarget(v){
+  const n=Math.round(parseFloat(v));
+  if(!(isFinite(n)&&n>0)){ toast('1以上の分数を入れてください'); renderSettings(); return; }
+  DB.settings.cardioTargetMin=n; stampSettings(); save();   // 目標の変更は必ず stampSettings() を通す（同期の勝敗根拠）
+  toast('週間目標を'+n+'分にしました');
+}
+// 日付文字列（YYYY-MM-DD）をn日ずらす。todayStr()と同じ端末ローカル日付で計算する
+function dateShift(d, days){
+  const t=new Date(d+'T00:00:00'); t.setDate(t.getDate()+days);
+  return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+}
+function cardioMinutesBetween(from, to){   // from〜to（両端含む）の合計分
+  return cardioList().reduce((a,c)=>(c && c.date>=from && c.date<=to)? a+(+c.min||0) : a, 0);
+}
+function cardioOn(date){ return cardioList().filter(c=>c && c.date===date); }
+
+//--- 記録タブ：手入力 ---------------------------------------------------------
+function fillCardioKinds(){
+  const s=document.getElementById('cd-kind'); if(!s || s.options.length) return;
+  s.innerHTML=Object.keys(CARDIO_KINDS).map(k=>`<option value="${k}">${CARDIO_KINDS[k]}</option>`).join('');
+}
+function addCardio(){
+  const date=recDate();
+  const kind=(document.getElementById('cd-kind')||{}).value || 'walk';
+  const min=Math.round(parseFloat(document.getElementById('cd-min').value));
+  const hrRaw=parseInt(document.getElementById('cd-hr').value,10);
+  if(!(isFinite(min)&&min>0)){ toast('時間（分）を入れてください'); return; }
+  const rec={id:uid(), date, kind:(CARDIO_KINDS[kind]?kind:'other'), min, hr:(isFinite(hrRaw)&&hrRaw>0)?hrRaw:null, src:'manual', gid:null, memo:''};
+  cardioList().push(stamp(rec)); save();   // stamp必須＝mtが無いと同期で相手の古いデータに負ける
+  document.getElementById('cd-min').value=''; document.getElementById('cd-hr').value='';
+  renderCardioToday(); toast('有酸素を記録しました');
+}
+function delCardio(id){
+  if(!confirm('この有酸素の記録を削除しますか？')) return;
+  DB.cardio=cardioList().filter(c=>c.id!==id); addTomb('cd', id);   // 墓標が無いと相手端末から復活する
+  save(); renderCardioToday(); toast('削除しました');
+}
+function delCardioHist(id){
+  if(!confirm('この有酸素の記録を削除しますか？')) return;
+  DB.cardio=cardioList().filter(c=>c.id!==id); addTomb('cd', id);
+  save(); renderHistory(); toast('削除しました');
+}
+function cardioLine(c){
+  return cardioKindName(c.kind)+' '+(+c.min||0)+'分'+(c.hr?' ・ 平均'+c.hr+'bpm':'')+(c.src==='garmin'?' ・ Garmin':'')+(c.memo?' ・ '+c.memo:'');
+}
+function renderCardioToday(){
+  const box=document.getElementById('cardio-today'); if(!box) return;
+  const sum=document.getElementById('cardio-today-sum');
+  const list=cardioOn(recDate());
+  if(!list.length){ box.innerHTML='<div class="empty" style="padding:14px 8px">この日の有酸素はまだありません</div>'; if(sum) sum.textContent=''; refreshIcons(); return; }
+  box.innerHTML=list.map(c=>`<div class="ex-item">
+    <span class="chip cd-chip">🫀</span>
+    <div class="nm"><b>${esc(cardioKindName(c.kind))} ${(+c.min||0)}分</b><br><span class="muted">${esc((c.hr?'平均'+c.hr+'bpm':'心拍—')+(c.src==='garmin'?' ・ Garmin':'')+(c.memo?' ・ '+c.memo:''))}</span></div>
+    <button class="x" onclick="delCardio('${c.id}')">${ic('x')}</button>
+  </div>`).join('');
+  if(sum) sum.textContent=list.reduce((a,c)=>a+(+c.min||0),0)+'分';
+  refreshIcons();
+}
+
+//--- 分析タブ：週間有酸素（部位バランスとは独立のカード）-----------------------
+function renderCardioWeek(){
+  const box=document.getElementById('cardio-week'); if(!box) return;
+  const today=todayStr(), tgt=cardioTarget();
+  const weeks=[];
+  for(let k=7;k>=0;k--){   // 古い→新しい（右端が今週）
+    const to=dateShift(today,-7*k), from=dateShift(to,-6);
+    weeks.push({from, to, min:cardioMinutesBetween(from,to)});
+  }
+  const cur=weeks[weeks.length-1].min;
+  const pct=Math.min(cur/tgt*100,100);
+  const col= cur<tgt*0.7 ? 'var(--warn)' : 'var(--ok)';
+  const maxMin=Math.max(tgt, ...weeks.map(w=>w.min), 1);
+  const mini=weeks.map(w=>{
+    const h=Math.round(w.min/maxMin*100);
+    const lbl=w.to.slice(5).replace('-','/');
+    return `<div class="cd-col" title="${w.from}〜${w.to}：${w.min}分">
+      <div class="cd-val">${w.min||''}</div>
+      <div class="cd-bar" style="height:${h}%"></div><div class="cd-lbl">${lbl}</div></div>`;
+  }).join('');
+  box.innerHTML=`<div class="bar-wrap">
+      <div class="bar-head"><span>直近7日の合計</span><span class="muted">${cur} / 目標${tgt} 分</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${col}"></div><div class="bar-target" style="left:100%"></div></div>
+    </div>
+    <div class="cd-mini">${mini}</div>
+    <p class="note" style="text-align:center;margin-top:4px">過去8週の週合計（右端が今週・単位は分）</p>`;
+}
+
+//--- Garmin CSV取込（通信ゼロ・累積式・重複は自動スキップ）---------------------
+// 入力＝Garmin Connect Web「アクティビティ」一覧のCSVエクスポート。列順に依存せずヘッダ名で引く（日英両対応）。
+const GARMIN_COLS={
+  type:['アクティビティタイプ','アクティビティの種類','activitytype','activity type'],
+  date:['日付','date','開始時刻','starttime'],
+  time:['タイム','時間','経過時間','time','elapsedtime','movingtime'],
+  hr:['平均心拍数','平均心拍','avghr','averagehr','avg hr'],
+  title:['タイトル','title','アクティビティ名']
+};
+function csvNorm(s){ return String(s==null?'':s).replace(/^﻿/,'').replace(/[\s　"]/g,'').toLowerCase(); }
+function parseCSVText(text){
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){ cur+='"'; i++; } else q=false; }
+      else cur+=c;
+    } else if(c==='"'){ q=true; }
+    else if(c===','){ row.push(cur); cur=''; }
+    else if(c==='\r'){ /* CRLFのCRは捨てる */ }
+    else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+    else cur+=c;
+  }
+  if(cur!=='' || row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(v=>String(v).trim()!==''));
+}
+function garminDecode(buf){
+  const u8=new Uint8Array(buf);
+  const ok=t=>/アクティビティ|日付|タイトル|activity|date|title/i.test(String(t).slice(0,600));
+  let txt='';
+  try{ txt=new TextDecoder('utf-8').decode(u8); }catch(_){ txt=''; }
+  if(!ok(txt) || /�/.test(txt.slice(0,600))){   // 文字化け＝Shift_JIS書き出しとみなして読み直す
+    try{ const alt=new TextDecoder('shift_jis').decode(u8); if(ok(alt)) txt=alt; }catch(_){}
+  }
+  return txt.replace(/^﻿/,'');
+}
+function garminColIdx(head){
+  const norm=head.map(csvNorm), idx={};
+  Object.keys(GARMIN_COLS).forEach(k=>{
+    idx[k]=-1;
+    GARMIN_COLS[k].forEach(cand=>{ if(idx[k]<0){ const i=norm.indexOf(csvNorm(cand)); if(i>=0) idx[k]=i; } });
+  });
+  return idx;
+}
+// タイプ→kind。**筋力トレーニング系とヨガ・ストレッチは取り込まない**（筋トレはアプリ側が正）
+function garminKind(t){
+  const s=String(t||'').toLowerCase();
+  const has=(...a)=>a.some(x=>s.indexOf(x)>=0);
+  if(has('筋力','ウエイト','ウェイト','strength','weight train')) return null;
+  if(has('ヨガ','yoga','ストレッチ','stretch','ピラティス','pilates')) return null;
+  if(has('ウォーキング','ウオーキング','散歩','walk')) return 'walk';
+  if(has('ランニング','ジョギング','トレッドミル','run','treadmill','jog')) return 'run';
+  if(has('サイクリング','バイク','自転車','cycl','bik','spin')) return 'bike';
+  if(has('水泳','スイミング','プール','swim')) return 'swim';
+  if(has('ハイキング','登山','トレッキング','hik','trek')) return 'hike';
+  if(has('階段','ステアクライ','stair')) return 'stair';
+  if(has('有酸素','カーディオ','cardio','エリプティカル','楕円','elliptical','ローイング','rowing','row','エアロビ','aerobic','hiit','クロストレーナー')) return 'other';
+  return undefined;   // 不明＝対象外
+}
+function garminDateOf(s){
+  const m=String(s||'').match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})/);
+  return m? m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0') : null;
+}
+function garminMinutes(s){   // 「hh:mm:ss」「mm:ss」→ 分（四捨五入・1分未満は1）
+  const t=String(s||'').trim(); if(!t || /^[-–—]+$/.test(t)) return 0;
+  const p=t.split(':').map(x=>parseFloat(String(x).replace(/[^\d.]/g,'')));
+  if(!p.length || p.some(v=>!isFinite(v))) return 0;
+  let sec=0;
+  if(p.length>=3) sec=p[0]*3600+p[1]*60+p[2];
+  else if(p.length===2) sec=p[0]*60+p[1];
+  else sec=p[0]*60;   // 単位が分だけの表記
+  if(!(sec>0)) return 0;
+  return Math.max(Math.round(sec/60),1);
+}
+function importGarminCSV(e){
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ processGarminCSV(garminDecode(r.result)); }catch(err){ console.error('garmin import failed', err); toast('CSVを読み込めませんでした'); } e.target.value=''; };
+  r.onerror=()=>{ toast('ファイルを開けませんでした'); e.target.value=''; };
+  r.readAsArrayBuffer(f);
+}
+function processGarminCSV(text){
+  const rows=parseCSVText(text||'');
+  let hi=-1, idx=null;
+  for(let i=0;i<Math.min(rows.length,5);i++){ const t=garminColIdx(rows[i]); if(t.date>=0 && t.time>=0){ hi=i; idx=t; break; } }
+  if(hi<0){ alert('Garminのアクティビティ一覧CSVではないようです（「日付」「タイム」の列が見つかりません）。'); return; }
+  const seen=new Set(cardioList().map(c=>c && c.gid).filter(Boolean));
+  const cand=[]; let dup=0, skip=0, total=0;
+  for(let i=hi+1;i<rows.length;i++){
+    const r=rows[i]; const cell=j=>(j>=0 && j<r.length)? String(r[j]).trim() : '';
+    const rawDate=cell(idx.date), rawType=cell(idx.type);
+    if(!rawDate && !rawType) continue;
+    total++;
+    const date=garminDateOf(rawDate), kind=garminKind(rawType), min=garminMinutes(cell(idx.time));
+    if(!date || !kind || !(min>0)){ skip++; continue; }   // 対象外（筋トレ・ヨガ・不明タイプ・日付/時間なし）
+    const gid=rawDate+'|'+rawType;
+    if(seen.has(gid)){ dup++; continue; }                 // 何度同じCSVを入れても増えない（累積式）
+    seen.add(gid);
+    const hr=parseInt(cell(idx.hr),10);
+    cand.push({id:uid(), date, kind, min, hr:(isFinite(hr)&&hr>0)?hr:null, src:'garmin', gid, memo:cell(idx.title)});
+  }
+  const msg='CSV '+total+'件中\n・追加 '+cand.length+'件\n・重複スキップ '+dup+'件\n・対象外 '+skip+'件（筋トレ・ヨガ・不明なタイプ）';
+  if(!cand.length){ alert(msg+'\n\n新しく取り込むものはありませんでした。'); return; }
+  if(!confirm(msg+'\n\n取り込みますか？')) return;
+  cand.forEach(c=>cardioList().push(stamp(c)));
+  save();
+  renderCardioToday(); renderCardioWeek(); renderHistory();
+  toast('Garmin: '+cand.length+'件を取り込みました');
 }
 
 //=========== 体重 ===========
@@ -2710,6 +3290,7 @@ function renderSettings(){
   document.getElementById('coef-edit').innerHTML=PARTS.map(p=>`<div class="row mb" style="align-items:center;gap:8px">
     <label style="margin:0;flex:1;color:${p.color};font-weight:700">${p.name}</label>
     <input type="number" step="0.1" style="flex:0 0 90px" value="${coefOf(p.key)}" onchange="setPartCoef('${p.key}', this.value)"></div>`).join('');
+  const ct=document.getElementById('cd-target'); if(ct) ct.value=cardioTarget();
   renderSyncUI();
 }
 // 週目標セット数／バランス補正係数の更新（旧＝インライン式。同期のため _mt 刻印を挟むので関数化した）
@@ -2799,9 +3380,9 @@ function importData(e){ const f=e.target.files[0]; if(!f) return; const r=new Fi
     let d;
     try{ d=JSON.parse(r.result); }catch(err){ toast('読み込み失敗'); e.target.value=''; return; } // パース失敗は従来どおり中断
     if(!(d.exercises && d.logs)){ toast('形式が違います'); e.target.value=''; return; }
-    const curL=DB.logs.length, curE=DB.exercises.length;
-    const newL=Array.isArray(d.logs)?d.logs.length:0, newE=Array.isArray(d.exercises)?d.exercises.length:0;
-    if(!confirm('現在: ログ'+curL+'件/種目'+curE+'件\n→ 取込後: ログ'+newL+'件/種目'+newE+'件\n\n上書きしますか？')){ e.target.value=''; return; }
+    const curL=DB.logs.length, curE=DB.exercises.length, curC=cardioList().length;
+    const newL=Array.isArray(d.logs)?d.logs.length:0, newE=Array.isArray(d.exercises)?d.exercises.length:0, newC=Array.isArray(d.cardio)?d.cardio.length:0;
+    if(!confirm('現在: ログ'+curL+'件/種目'+curE+'件/有酸素'+curC+'件\n→ 取込後: ログ'+newL+'件/種目'+newE+'件/有酸素'+newC+'件\n\n上書きしますか？')){ e.target.value=''; return; }
     try{ save(); const cur=localStorage.getItem(LS); if(cur!=null) localStorage.setItem(LS+':preimport', cur); }catch(_){} // 上書き前に現在データを1世代退避
     localStorage.setItem(LS,JSON.stringify(d)); DB=load(); initRender();
     toast('読み込みました。直前データは退避済み（設定→復元）');
@@ -3070,6 +3651,21 @@ function migrateMachineSideRaise(){ // サイドレイズの器具違いを分�
     DB.exercises.push({id:uid(), name:'マシンサイドレイズ', part:'shoulder', sec:['back'], fav:false});
   DB.settings.machineSideRaiseV1=true; save();
 }
+// 定型メニュー「持久コア(約10分)」を一度だけ追加する（2026-08-02f）。
+// 位置づけ＝ユーザーが消してよいユーザーデータ。フラグで一度きり＝消しても復活しない。同名テンプレがあれば何もしない。
+// 等尺性（プランク系）は回数欄に秒を入れて記録する運用（ケーゲルの「回数=時間」と同型・新機構は作らない）。
+function migrateStaminaTemplate(){
+  if(DB.settings.staminaTplV1) return;
+  const NAME='持久コア(約10分)';
+  DB.templates=DB.templates||[];
+  if(!DB.templates.some(t=>t && t.name===NAME)){
+    const exIds=['プランク','サイドプランク','ショルダーブリッジ','キャット&カウ']
+      .map(n=>{ const e=DB.exercises.find(x=>x.name===n); return e? e.id : null; })
+      .filter(Boolean);
+    if(exIds.length) DB.templates.push(stamp({id:uid(), name:NAME, exIds}));
+  }
+  DB.settings.staminaTplV1=true; save();
+}
 
 //=========== 端末間の同期（GAS方式・2026-08-01i） ===========
 // 設計: ドキュメント/設計書_同期_2026-08-01.md ／ サーバ側: ドキュメント/GAS同期コード.gs.txt
@@ -3119,6 +3715,9 @@ function mergeDB(local, remote){
   if(remote.bodyweight!=null && !isArr(remote.bodyweight)) return null;
   if(remote.goals!=null && !isArr(remote.goals)) return null;
   if(remote.templates!=null && !isArr(remote.templates)) return null;
+  // 有酸素（2026-08-02f）＝**旧版の端末にはこのキーが無い**。無いのは正常＝空配列扱い（マージ中止にしない）。
+  // 不正なのは「存在するのに配列でない」場合だけ。
+  if(remote.cardio!=null && !isArr(remote.cardio)) return null;
   if(remote.tomb!=null && !isArr(remote.tomb)) return null;
   if(remote.settings!=null && !isObj(remote.settings)) return null;
 
@@ -3129,6 +3728,7 @@ function mergeDB(local, remote){
   const lBw=arr(L,'bodyweight'),rBw=arr(remote,'bodyweight');
   const lGo=arr(L,'goals'),     rGo=arr(remote,'goals');
   const lTp=arr(L,'templates'), rTp=arr(remote,'templates');
+  const lCd=arr(L,'cardio'),    rCd=arr(remote,'cardio');
   const lTb=arr(L,'tomb'),      rTb=arr(remote,'tomb');
   const lS=isObj(L.settings)?L.settings:{}, rS=isObj(remote.settings)?remote.settings:{};
 
@@ -3227,6 +3827,7 @@ function mergeDB(local, remote){
   };
   const goals=byId(lGo,rGo,'goal');
   const templates=byId(lTp,rTp,'tpl');
+  const cardio=byId(lCd,rCd,'cd');   // 有酸素も id キー・mt大が勝つ・墓標は 'cd'
 
   // --- 6) 設定：_mtが新しい側を基礎に。theme/syncUrlは常にローカル・移行フラグはOR・lastBackupAtはmax ---
   const num=v=>(typeof v==='number'&&isFinite(v))?v:0;
@@ -3252,21 +3853,22 @@ function mergeDB(local, remote){
   tombMap.forEach((t,key)=>{ const i=key.indexOf('\x00'); tomb.push({k:key.slice(0,i), id:key.slice(i+1), t}); });
 
   const db={
-    exercises:exList, logs, bodyweight, goals, templates, tomb,
+    exercises:exList, logs, bodyweight, goals, templates, cardio, tomb,
     syncMeta: isObj(L.syncMeta)? clone(L.syncMeta) : {},   // 常にローカル
     settings
   };
   // 取り込んだ「増分」（ローカルに無かったものの数）。toastの件数表示に使う
   const had=(a,f)=>{ const s=new Set(); a.forEach(o=>{ if(isObj(o)) s.add(f(o)); }); return s; };
-  const hEx=had(lEx,o=>o.name), hLog=had(lLog,o=>o.id), hBw=had(lBw,o=>o.date), hGo=had(lGo,o=>o.id), hTp=had(lTp,o=>o.id);
+  const hEx=had(lEx,o=>o.name), hLog=had(lLog,o=>o.id), hBw=had(lBw,o=>o.date), hGo=had(lGo,o=>o.id), hTp=had(lTp,o=>o.id), hCd=had(lCd,o=>o.id);
   const added={
     exercises: exList.filter(o=>!hEx.has(o.name)).length,
     logs:      logs.filter(o=>!hLog.has(o.id)).length,
     bodyweight:bodyweight.filter(o=>!hBw.has(o.date)).length,
     goals:     goals.filter(o=>!hGo.has(o.id)).length,
-    templates: templates.filter(o=>!hTp.has(o.id)).length
+    templates: templates.filter(o=>!hTp.has(o.id)).length,
+    cardio:    cardio.filter(o=>!hCd.has(o.id)).length
   };
-  const total=added.exercises+added.logs+added.bodyweight+added.goals+added.templates;
+  const total=added.exercises+added.logs+added.bodyweight+added.goals+added.templates+added.cardio;
   // 「増分0でも中身は変わった」場合（編集・削除の取り込み）を拾う。
   // キー順の違いを変化と誤判定しないよう、比較用にはキーを並べ替えた文字列を使う
   const stable=v=>{
@@ -3274,8 +3876,8 @@ function mergeDB(local, remote){
     if(v && typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';
     return JSON.stringify(v===undefined?null:v);
   };
-  const sig=o=>stable([o.exercises,o.logs,o.bodyweight,o.goals,o.templates,o.tomb,o.settings]);
-  const changed = sig(db)!==sig({exercises:lEx,logs:lLog,bodyweight:lBw,goals:lGo,templates:lTp,tomb:lTb,settings:lS});
+  const sig=o=>stable([o.exercises,o.logs,o.bodyweight,o.goals,o.templates,o.cardio,o.tomb,o.settings]);
+  const changed = sig(db)!==sig({exercises:lEx,logs:lLog,bodyweight:lBw,goals:lGo,templates:lTp,cardio:lCd,tomb:lTb,settings:lS});
   return {db, added, total, changed};
 }
 
@@ -3300,7 +3902,7 @@ async function syncPull(opts){
     if(!m) throw new Error('schema');                      // 壊れたリモートは無視＝現状維持
     if(m.changed){
       DB.exercises=m.db.exercises; DB.logs=m.db.logs; DB.bodyweight=m.db.bodyweight;
-      DB.goals=m.db.goals; DB.templates=m.db.templates; DB.tomb=m.db.tomb; DB.settings=m.db.settings;
+      DB.goals=m.db.goals; DB.templates=m.db.templates; DB.cardio=m.db.cardio; DB.tomb=m.db.tomb; DB.settings=m.db.settings;
     }
     syncMark('lastPullAt');                                 // save(skipSync)込み＝pull起因でpushしない
     if(m.changed){ syncRerender(); }
@@ -3438,7 +4040,9 @@ function initRender(){
   migrateNewCards2026d();
   migrateBenchPartial();
   migrateMachineSideRaise();
+  migrateStaminaTemplate();   // 定型メニュー「持久コア(約10分)」＝種目マスタの移行が全部終わった後（名前引きのため）
   applyTheme();
+  fillCardioKinds();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
   document.getElementById('rec-date').value=todayStr();
   document.getElementById('bw-date').value=todayStr();
