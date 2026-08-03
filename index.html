@@ -142,6 +142,32 @@
   .ex-item{display:flex; align-items:center; gap:9px; padding:11px 0; border-bottom:1px solid var(--line-soft);}
   .ex-item:last-child{border-bottom:none;}
   .ex-item .nm{flex:1; font-size:14px; color:var(--txt);}
+  /* 並び替えモード（2026-08-03）。常設だと375pxで [chip][名前][✎][×] が窮屈なのでモード切替にした */
+  .reorder-btn{margin:0 0 6px;}
+  /* ⚠️ ダークテーマ専用の `body[data-theme="dark"] .btn.sec`(0,3,1) は `.reorder-btn.on`(0,2,0) より
+     詳細度が高い。ON状態の背景が --panel2(灰)に戻され、文字だけ --accent-ink(黒)になって
+     コントラスト比1.2の読めない状態になる（2026-08-03・最小ケースで実測）。→ dark用の行を必ず添える。
+     ライトテーマは `.btn.sec` と同詳細度で後に書けば効くので、要素名(button)は保険。 */
+  button.reorder-btn.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  body[data-theme="dark"] button.reorder-btn.on{background:var(--accent);}
+  .ex-item.reord{background:var(--panel2); border-radius:8px; padding-left:6px; padding-right:4px;}
+  body[data-theme="light"] .ex-item.reord{background:var(--paper-2);}
+  .ex-item .ord-no{flex:none; width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    background:var(--line); color:var(--txt); font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .ex-item .ord-b{flex:none; width:40px; height:40px; display:inline-flex; align-items:center; justify-content:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--txt); cursor:pointer; padding:0;}
+  .ex-item .ord-b:disabled{opacity:.3; cursor:default;}
+  /* 定型メニューの内訳モーダル（2026-08-03d）＝タップで即全部追加をやめ、選んでから追加する */
+  .tpl-list{max-height:46vh; overflow-y:auto; -webkit-overflow-scrolling:touch; margin:0 0 10px;
+    border:1px solid var(--line); border-radius:var(--r-md);}
+  .tpl-row{display:flex; align-items:flex-start; gap:10px; padding:11px 10px; cursor:pointer;
+    border-bottom:1px solid var(--line-soft);}
+  .tpl-row:last-child{border-bottom:none;}
+  .tpl-row.off{opacity:.55; cursor:default;}
+  .tpl-row input.tpl-ck{flex:none; width:20px; height:20px; margin:2px 0 0; accent-color:var(--accent);}
+  .tpl-row .tpl-nm{flex:1; font-size:14px; line-height:1.45; min-width:0; word-break:break-word;}
+  .tpl-warn{color:var(--warn);}
+  .ex-item .ord-b svg.lucide{width:20px; height:20px;}
   /* 部位の折りたたみ見出し（2026-08-01：238種目を初期全展開すると長すぎるため） */
   .ex-part{display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:10px 4px; margin-top:8px;
     background:none; border:none; border-bottom:1px solid var(--line-soft); cursor:pointer;
@@ -474,6 +500,7 @@
 
     <div class="card">
       <h2>今日のメニュー（記録済み）<span class="r" id="today-sum"></span></h2>
+      <button id="reorder-btn" class="btn sec small reorder-btn" style="display:none" onclick="toggleReorder()"></button>
       <div id="today-logs"></div>
     </div>
 
@@ -894,7 +921,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02p";
+const APP_VERSION="2026.08.03d";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1073,7 +1100,7 @@ document.querySelectorAll('.tabs button').forEach(b=>{
     document.getElementById('v-'+b.dataset.v).classList.add('active');
     if(b.dataset.v==='balance') renderBalance();
     if(b.dataset.v==='history') renderHistory();
-    if(b.dataset.v==='record'){ renderTodayLogs(); renderRecommend(); renderTemplates(); }
+    if(b.dataset.v==='record'){ reorderMode=false; renderTodayLogs(); renderRecommend(); renderTemplates(); }
     if(b.dataset.v==='weight') renderWeight();
     if(b.dataset.v==='settings') renderSettings();
     if(b.dataset.v==='strength') renderStrength();
@@ -1432,6 +1459,10 @@ function addLogEntry(exId, sets, opts){
   const entry={id:uid(), date:opts.date||todayStr(), exId, sets};
   if(opts.rpe!=null && !isNaN(opts.rpe)) entry.rpe=opts.rpe;
   if(opts.memo) entry.memo=opts.memo;
+  // 並び順（2026-08-03）＝その日に ord 付きが既にあるときだけ max+1 を付ける。
+  // 並び替えを一度もしていない人のデータには ord を生やさない（既存JSONと差分ゼロ）。
+  const mx=DB.logs.reduce((m,l)=>(l.date===entry.date && hasOrd(l) && l.ord>m)?l.ord:m, -1);
+  if(mx>=0) entry.ord=mx+1;
   stamp(entry);
   DB.logs.push(entry); save();
   return entry;
@@ -1462,27 +1493,66 @@ function saveLog(){
   if(best && Math.round(thisBest)>=Math.round(best.e1rm) && thisBest>0) toast('自己ベスト更新！(推定1RM '+Math.round(thisBest)+'kg)');
   else toast('記録しました');
 }
+//=========== その日の並び順（2026-08-03） ===========
+// ord = その日の中での順番（0始まり）。**未指定が正常**＝2026-08-03以前の記録と、
+// 旧版の端末から同期で入ってきた記録には無い。無いものは「末尾に、従来の並びのまま」。
+function hasOrd(l){ return l && typeof l.ord==='number' && isFinite(l.ord); }
+function sortDayLogs(arr){
+  const BIG=1e9;
+  return arr.map((l,i)=>({l, k:hasOrd(l)?l.ord:(BIG+i), i}))
+    .sort((a,b)=> (a.k-b.k) || (a.i-b.i))   // 同キーは元の並びで安定化
+    .map(o=>o.l);
+}
+function dayLogs(date){ return sortDayLogs(DB.logs.filter(l=>l.date===date)); }
+// 位置をひとつ動かす。動かしたら**その日の全件に 0..n-1 を振り直す**（混在を残さない）
+function moveLog(id, dir){
+  const l=DB.logs.find(x=>x.id===id); if(!l) return;
+  const arr=dayLogs(l.date);
+  const i=arr.findIndex(x=>x.id===id), j=i+dir;
+  if(i<0 || j<0 || j>=arr.length) return;
+  const t=arr[i]; arr[i]=arr[j]; arr[j]=t;
+  arr.forEach((x,k)=>{ if(x.ord!==k){ x.ord=k; stamp(x); } });
+  save(); renderTodayLogs();
+}
+let reorderMode=false;   // 並び替えモード（保存しない＝タブ移動・日付変更・リロードで解除）
+function toggleReorder(){ reorderMode=!reorderMode; renderTodayLogs(); }
+
 function renderTodayLogs(){
   renderCardioToday();   // 有酸素カードも同じ日付で描き直す（この関数が記録タブ更新の共通経路）
   const date=document.getElementById('rec-date').value||todayStr();
-  const logs=DB.logs.filter(l=>l.date===date);
+  const logs=dayLogs(date);
   const box=document.getElementById('today-logs');
   const sum=document.getElementById('today-sum');
+  const rb=document.getElementById('reorder-btn');
+  if(logs.length<2 && reorderMode) reorderMode=false;   // 1件以下なら並び替えは意味がない
+  if(rb){
+    rb.style.display = logs.length>=2 ? '' : 'none';
+    rb.className = 'btn sec small reorder-btn'+(reorderMode?' on':'');
+    rb.innerHTML = reorderMode ? `${ic('check')} 完了` : `${ic('arrow-up-down')} 並び替え`;
+  }
   if(logs.length===0){ box.innerHTML='<div class="empty">この日の記録はまだありません</div>'; sum.textContent=''; return; }
   let tv=0, ts=0;
-  box.innerHTML=logs.map(l=>{
+  box.innerHTML=logs.map((l,idx)=>{
     const ex=DB.exercises.find(e=>e.id===l.exId)||{name:"(削除済)",part:"core"};
     const p=partOf(ex.part);
     const vol=l.sets.reduce((s,x)=>s+x.weight*x.reps,0); tv+=vol; ts+=l.sets.length;
     const setsTxt=setsText(l.sets, false);
-    return `<div class="ex-item">
-      <span class="chip" style="background:${p.color}22;color:${p.color}">${p.name}</span>
+    const head = reorderMode
+      ? `<span class="ord-no">${idx+1}</span>`
+      : `<span class="chip" style="background:${p.color}22;color:${p.color}">${p.name}</span>`;
+    const tail = reorderMode
+      ? `<button class="ord-b" onclick="moveLog('${l.id}',-1)" title="上へ"${idx===0?' disabled':''}>${ic('chevron-up')}</button>`
+       +`<button class="ord-b" onclick="moveLog('${l.id}',1)" title="下へ"${idx===logs.length-1?' disabled':''}>${ic('chevron-down')}</button>`
+      : `<button class="star" onclick="editLog('${l.id}')" title="編集">${ic('pencil')}</button>`
+       +`<button class="x" onclick="delLog('${l.id}')">${ic('x')}</button>`;
+    return `<div class="ex-item${reorderMode?' reord':''}">
+      ${head}
       <div class="nm"><b>${esc(ex.name)}</b><br><span class="muted">${setsTxt} ・ ${fmt(vol)}kg${l.rpe?` ・ RPE${l.rpe}`:''}${l.memo?` ・ ${ic('sticky-note')} ${esc(l.memo)}`:''}</span></div>
-      <button class="star" onclick="editLog('${l.id}')" title="編集">${ic('pencil')}</button>
-      <button class="x" onclick="delLog('${l.id}')">${ic('x')}</button>
+      ${tail}
     </div>`;
   }).join('');
   sum.textContent=`${logs.length}種目 ・ ${ts}セット ・ ${fmt(tv)}kg`;
+  refreshIcons();
 }
 function delLog(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); addTomb('log',id); save(); renderTodayLogs(); }
 function delLogHist(id){ if(!confirm('この記録を削除しますか？')) return; DB.logs=DB.logs.filter(l=>l.id!==id); addTomb('log',id); save(); renderHistory(); toast('削除しました'); }
@@ -1501,7 +1571,8 @@ function editLog(id){
     <input type="number" class="m-r" value="${s.reps}" placeholder="回">
     <button class="x" onclick="this.parentNode.remove()">${ic('x')}</button></div>`).join('');
   openModal(`<h3>${esc(ex.name)} を編集</h3>
-    <label>日付</label><input type="date" id="m-date" value="${l.date}">
+    <label>種目</label><select id="m-ex" onchange="refreshModalSideToggles()">${exOptionsHTML(l.exId)}</select>
+    <label class="mt">日付</label><input type="date" id="m-date" value="${l.date}">
     <label class="mt">セット</label><div id="m-sets">${rows}</div>
     <button class="btn sec small" onclick="modalAddSet()">＋ セット</button>
     <div class="row mt"><div><label>RPE</label><input type="number" id="m-rpe" value="${l.rpe||''}"></div>
@@ -1509,7 +1580,40 @@ function editLog(id){
     <div class="row mt"><button class="btn" onclick="saveEdit('${id}')">保存</button>
     <button class="btn ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
-let modalUni=false;   // 編集モーダルで左右トグルを出すか（editLogでセット）
+let modalUni=false;   // 編集モーダルで左右トグルを出すか（editLog／種目変更でセット）
+// 編集モーダルの種目セレクト（2026-08-03）。記録タブのフィルタには従わず**全種目**を出す
+// （別の部位の種目に差し替えたいのが主目的なため）。部位でグループ・部位内は五十音順。
+// ⚠️ 削除済み種目のログでは一致するoptionが無い＝先頭が選ばれて「保存したら種目が変わる」事故になるので、
+//    そのときだけ value="" の「そのまま」を先頭に置き、保存側で exId を触らない。
+function exOptionsHTML(curId){
+  const cur=DB.exercises.find(e=>e.id===curId);
+  const grouped={};
+  DB.exercises.forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
+  let html = cur ? '' : `<option value="" selected>そのまま（削除済みの種目）</option>`;
+  PARTS.forEach(p=>{
+    const g=grouped[p.key]; if(!g) return;
+    html += `<optgroup label="${esc(p.name)}">`
+      + g.slice().sort(byExName).map(e=>`<option value="${e.id}"${e.id===curId?' selected':''}>${esc((e.fav?'★ ':'')+e.name)}</option>`).join('')
+      + `</optgroup>`;
+  });
+  return html;
+}
+// 種目を替えると片側種目かどうかが変わる。セット行のL/Rトグルを付け外しする（入力値は保持）
+function refreshModalSideToggles(){
+  const sel=document.getElementById('m-ex'); const box=document.getElementById('m-sets');
+  if(!sel || !box) return;
+  const ex=DB.exercises.find(e=>e.id===sel.value);
+  // 種目が特定できない（=「そのまま」）ときは、今出ているトグルの状態を維持する
+  if(!ex) return;
+  const uni=isUnilateral(ex);
+  modalUni=uni;
+  box.querySelectorAll('.set-row').forEach(row=>{
+    const tg=row.querySelector('.side-tg');
+    if(uni && !tg){ row.classList.add('uni'); row.querySelector('.idx').insertAdjacentHTML('afterend', sideTgHTML('')); }
+    else if(!uni && tg){ tg.remove(); row.classList.remove('uni'); }
+  });
+  refreshIcons();
+}
 function modalAddSet(){
   const box=document.getElementById('m-sets');
   const d=document.createElement('div'); d.className='set-row'+(modalUni?' uni':'');
@@ -1528,11 +1632,17 @@ function saveEdit(id){
     }
   });
   if(sets.length===0){ toast('回数を入力してください'); return; }
+  // 種目変更（2026-08-03）。value=''（削除済み種目の「そのまま」）と存在しないidは無視＝黙って別種目に化けさせない。
+  // ord は触らない＝並びは「やった順」なので種目を替えても位置は動かない。
+  const selEx=document.getElementById('m-ex');
+  const newExId=selEx?selEx.value:'';
+  if(newExId && newExId!==l.exId && DB.exercises.some(e=>e.id===newExId)) l.exId=newExId;
   l.sets=sets; l.date=document.getElementById('m-date').value||l.date;
   const rpe=parseInt(document.getElementById('m-rpe').value); l.rpe=isNaN(rpe)?undefined:rpe;
   const memo=document.getElementById('m-memo').value.trim(); l.memo=memo||undefined;
   stamp(l);
-  save(); closeModal(); renderTodayLogs(); toast('更新しました');
+  // 履歴タブからも開けるので両方描き直す（従来は記録タブだけ＝履歴から直すと画面が古いままだった）
+  save(); closeModal(); renderTodayLogs(); renderHistory(); toast('更新しました');
 }
 function openModal(html){ document.getElementById('modal').innerHTML=html; document.getElementById('modal-bg').classList.add('show'); }
 function closeModal(){
@@ -1706,18 +1816,75 @@ function pickRecExercise(name){
 }
 
 //=========== F2：定型メニューテンプレート ===========
-// DB.templates=[{id,name,exIds:[...]}]。重量は保存しない＝展開時に最新ログからプリフィル（設計判断）
+// DB.templates=[{id,name,exNames:[...], exIds:[...]}]。重量は保存しない＝展開時に最新ログからプリフィル（設計判断）
+//
+// ⚠️ **正は `exNames`（種目名）。`exIds` は後方互換のために書くだけ**（2026-08-03に変更）。
+// 理由＝種目IDは端末ごとに違う。既定74種だけが `d0..dN` で共通で、マイグレーションで足した
+// 残り（実データで157/238）は `uid()` の乱数なので**PCとスマホで別のID**になる。
+// mergeDBは種目を**名前**でまとめてローカルidを維持し、logsのexIdはremapするが、
+// **templates.exIds はremapしない**ため、相手端末で作ったテンプレは参照切れになり
+// 「種目数がPCとスマホで違う」「展開しても一部の種目が出ない」が起きていた。
+// 名前は同期のキーそのものなので端末に依存しない＝これを正にすれば食い違わない。
+function tplNamesOf(t){
+  if(!t) return [];
+  if(Array.isArray(t.exNames) && t.exNames.length) return t.exNames.slice();
+  // 旧形式（exIdsのみ）＝この端末で解決できる分だけ名前に直す
+  return (t.exIds||[]).map(id=>{ const e=DB.exercises.find(x=>x.id===id); return e?e.name:null; }).filter(Boolean);
+}
+function tplExercisesOf(t){   // 名前→この端末の種目オブジェクト（見つからない名前は落とす）
+  return tplNamesOf(t).map(n=>DB.exercises.find(e=>e.name===n)).filter(Boolean);
+}
+// 旧形式テンプレを名前ベースへ移行（2026-08-03）。
+// ⚠️ **全部のexIdが解決できたときだけ書き換える**。1つでも解決できない＝この端末は「壊れている側」なので
+//    触らない（名前が欠けたまま確定させると、健全な端末の版が同期で来ても mt が古くて負ける）。
+function migrateTplNames(){
+  let changed=0;
+  (DB.templates||[]).forEach(t=>{
+    if(Array.isArray(t.exNames) && t.exNames.length) return;      // 済み
+    const ids=t.exIds||[];
+    if(!ids.length) return;
+    const names=ids.map(id=>{ const e=DB.exercises.find(x=>x.id===id); return e?e.name:null; });
+    if(names.some(n=>n===null)) return;                            // 壊れている側＝手を出さない
+    t.exNames=names; stamp(t); changed++;
+  });
+  if(changed) save();
+}
+// 同名テンプレの重複を1本にまとめる（2026-08-03）。
+// 原因＝`migrateStaminaTemplate()`は**端末ごとに走る**ので、両方の端末が同期前に作ると
+// 別idの「持久コア(約10分)」が2本でき、mergeDBはテンプレを**idキー**でまとめるため両方残る。
+// ⚠️ **両方に`exNames`があり、中身（名前の集合）が完全一致するときだけ**まとめる。
+//    片方が未移行だと「この端末で解決できた数」が端末ごとに違い、**両側が違う方を消して全部消える**。
+//    勝ち残りは**idの小さい方**＝どの端末でも同じ判断になるので、消し合いにならない。
+function dedupeTemplates(){
+  const tpls=DB.templates||[];
+  const byName=new Map(); const kill=[];
+  tpls.forEach(t=>{
+    if(!t || !Array.isArray(t.exNames) || !t.exNames.length) return;   // 未移行は対象外＝触らない
+    const sig=JSON.stringify(t.exNames.slice().sort());   // 区切り文字に依存しない署名（生のNULを埋めない）
+    const cur=byName.get(t.name);
+    if(!cur){ byName.set(t.name,{t,sig}); return; }
+    if(cur.sig!==sig) return;            // 同名でも中身が違う＝ユーザーの意図とみなして両方残す
+    const keep = String(cur.t.id) <= String(t.id) ? cur.t : t;
+    kill.push((keep===cur.t ? t : cur.t).id);
+    byName.set(t.name,{t:keep,sig});
+  });
+  if(!kill.length) return 0;
+  DB.templates=tpls.filter(t=>kill.indexOf(t.id)<0);
+  kill.forEach(id=>addTomb('tpl', id));   // 墓標を立てないと同期で戻ってくる
+  save();
+  return kill.length;
+}
 function recDate(){ return document.getElementById('rec-date').value||todayStr(); }
-function todaysExIds(){ // 今日のメニュー（rec-date）の種目ID（出現順・重複排除）
+function todaysExIds(){ // 今日のメニュー（rec-date）の種目ID（**並び替え後の順**・重複排除）
   const d=recDate(); const seen=new Set(); const out=[];
-  DB.logs.filter(l=>l.date===d).forEach(l=>{ if(!seen.has(l.exId)){ seen.add(l.exId); out.push(l.exId); } });
+  dayLogs(d).forEach(l=>{ if(!seen.has(l.exId)){ seen.add(l.exId); out.push(l.exId); } });
   return out;
 }
 function renderTemplates(){
   const box=document.getElementById('rec-templates'); if(!box) return;
   const tpls=DB.templates||[];
   const chips = tpls.length ? tpls.map(t=>{
-    const cnt=(t.exIds||[]).filter(id=>DB.exercises.some(e=>e.id===id)).length;
+    const cnt=tplExercisesOf(t).length;   // 名前で数える＝端末をまたいでも同じ数になる（2026-08-03）
     return `<span class="tmpl-chip">`
       +`<button class="tc-main" onclick="expandTemplate('${t.id}')">${ic('clipboard-list')} ${esc(t.name)} <span class="tc-cnt">${cnt}種目</span></button>`
       +`<button class="tc-edit" onclick="renameTemplate('${t.id}')" title="名前変更">${ic('pencil')}</button>`
@@ -1727,41 +1894,100 @@ function renderTemplates(){
   box.innerHTML=`<div class="card"><h2>${ic('clipboard-list')} 定型メニュー</h2>`
     +`<div>${chips}</div>`
     +`<button class="btn sec small" onclick="saveTemplateFromToday()">${ic('plus')} 今日のメニューから保存</button>`
-    +`<p class="note" style="margin-top:8px">チップをタップすると今日のメニューに展開します（各種目の最新の重量が入ります）。重量を確認して保存してください。</p></div>`;
+    +`<p class="note" style="margin-top:8px">チップをタップすると<b>中身の一覧</b>が出ます。追加する種目を選んでから追加できます（重量は各種目の前回の記録が入ります）。</p></div>`;
   refreshIcons();
 }
-function expandTemplate(id){
-  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+// 内訳モーダルのプリフィル表記（2026-08-03d）。共用の`setsText()`は自重を「-kg×60」と出してしまうので専用に持つ。
+// 同じ内容のセットが続くときは「5kg×30 ×3セット」に畳む（4セットぶん並べると375pxで折り返して読みにくい）
+function tplSetsText(sets){
+  if(!sets || !sets.length) return '';
+  const one=s=>(s.weight>0 ? s.weight+'kg×'+s.reps : s.reps+'回');
+  const all=sets.map(one);
+  return (sets.length>1 && all.every(x=>x===all[0])) ? `${all[0]} ×${sets.length}セット` : all.join(' / ');
+}
+// テンプレの中身を1行ずつ組み立てる（モーダル用・2026-08-03d）
+function tplRows(t){
   const d=recDate();
   const already=new Set(DB.logs.filter(l=>l.date===d).map(l=>l.exId));
-  let added=0, skipped=0;
-  (t.exIds||[]).forEach(exId=>{
-    const ex=DB.exercises.find(e=>e.id===exId); if(!ex) return; // 削除済み種目は無視
-    if(already.has(exId)){ skipped++; return; }               // 二重追加しない
-    const last=lastLogFor(exId);
-    const sets = last ? last.sets.map(s=>({weight:s.weight, reps:s.reps})) : [{weight:0, reps:0}]; // 無ければ空1行
-    addLogEntry(exId, sets, {date:d});
-    already.add(exId); added++;
+  return tplNamesOf(t).map(n=>{
+    const ex=DB.exercises.find(e=>e.name===n);
+    if(!ex) return {name:n, missing:true};                       // 種目一覧から消えた/改名された
+    const last=lastLogFor(ex.id);
+    return {name:n, ex, already:already.has(ex.id), last};
   });
+}
+// チップのタップ＝**いきなり全部追加せず、内訳を見て選ばせる**（2026-08-03d・ユーザー要望
+// 「追加後に全部削除するのが面倒くさい」）。既に今日入っている種目と、見つからない種目は
+// 最初からチェックを外して理由を書く。
+function expandTemplate(id){
+  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+  const rows=tplRows(t);
+  if(!rows.length){ toast('この定型メニューには種目が入っていません'); return; }
+  const items=rows.map((r,i)=>{
+    const dis = r.missing || r.already;
+    const note = r.missing ? '<span class="tpl-warn">種目一覧に見つかりません</span>'
+               : r.already ? '<span class="tpl-warn">すでに今日のメニューにあります</span>'
+               : (r.last ? esc(tplSetsText(r.last.sets)) : '前回の記録なし（空欄で入ります）');
+    return `<label class="tpl-row${dis?' off':''}">
+      <input type="checkbox" class="tpl-ck" data-i="${i}" ${dis?'disabled':'checked'}>
+      <span class="tpl-nm"><b>${esc(r.name)}</b><br><span class="muted">${note}</span></span>
+    </label>`;
+  }).join('');
+  const addable=rows.filter(r=>!r.missing && !r.already).length;
+  openModal(`<h3>${esc(t.name)}</h3>
+    <p class="note" style="margin:0 0 8px">追加する種目を選んでください。重量は各種目の<b>前回の記録</b>が入ります。</p>
+    <div class="tpl-list">${items}</div>
+    ${addable>1?`<button class="btn sec small" onclick="tplToggleAll()" id="tpl-all">すべて外す</button>`:''}
+    <div class="row mt">
+      <button class="btn" onclick="applyTemplate('${t.id}')"${addable?'':' disabled'}>選んだ種目を追加</button>
+      <button class="btn ghost" onclick="closeModal()">キャンセル</button>
+    </div>`);
+  refreshIcons();
+}
+function tplToggleAll(){
+  const cks=[...document.querySelectorAll('.tpl-ck:not(:disabled)')];
+  const on=cks.some(c=>c.checked);           // 1つでも入っていれば「すべて外す」
+  cks.forEach(c=>{ c.checked=!on; });
+  const b=document.getElementById('tpl-all'); if(b) b.textContent = on ? 'すべて選ぶ' : 'すべて外す';
+}
+function applyTemplate(id){
+  const t=(DB.templates||[]).find(x=>x.id===id); if(!t) return;
+  const rows=tplRows(t);
+  const pick=[...document.querySelectorAll('.tpl-ck')].filter(c=>c.checked && !c.disabled).map(c=>rows[+c.dataset.i]);
+  if(!pick.length){ toast('種目が1つも選ばれていません'); return; }
+  const d=recDate();
+  // 追加の直前にもう一度「今日に既にあるか」を見る（Fable検収2026-08-03）。
+  // モーダルを開いたまま同期pullが走ると、開いた時点の判定が古くなり二重追加になるため。
+  const already=new Set(DB.logs.filter(l=>l.date===d).map(l=>l.exId));
+  let added=0, skipped=0;
+  pick.forEach(r=>{
+    if(!r || !r.ex) return;
+    if(already.has(r.ex.id)){ skipped++; return; }
+    const sets = r.last ? r.last.sets.map(s=>({weight:s.weight, reps:s.reps})) : [{weight:0, reps:0}];
+    addLogEntry(r.ex.id, sets, {date:d}); already.add(r.ex.id); added++;
+  });
+  closeModal();
   renderTodayLogs(); renderRecommend(); renderTemplates();
+  const skipMsg = skipped ? `（${skipped}種目は追加済みのためスキップ）` : '';
   if(added){
     document.querySelector('#today-logs').scrollIntoView({behavior:'smooth', block:'center'});
-    toast(`${added}種目を展開しました。重量を確認して保存してください${skipped?`（${skipped}種目は追加済みのためスキップ）`:''}`);
-  } else if(skipped){ toast(`全${skipped}種目が今日のメニューに追加済みでした`); }
-  else { toast('展開できる種目がありません'); }
+    toast(`${added}種目を追加しました。重量を確認して保存してください${skipMsg}`);
+  } else if(skipped){ toast(`選んだ種目はすべて追加済みでした`); }
 }
 function saveTemplateFromToday(){
   const exIds=todaysExIds();
   if(!exIds.length){ toast('今日のメニューが空です。先に種目を追加してください'); return; }
   const name=(prompt('テンプレート名（例：上半身の日）', '') || '').trim();
   if(!name) return;
+  // 正は exNames（端末非依存）。exIds も併記＝旧版のアプリで開いても従来どおり動く（2026-08-03）
+  const exNames=exIds.map(id=>{ const e=DB.exercises.find(x=>x.id===id); return e?e.name:null; }).filter(Boolean);
   DB.templates=DB.templates||[];
   const dup=DB.templates.find(t=>t.name===name);
   if(dup){
     if(!confirm(`「${name}」は既にあります。上書きしますか？`)) return;
-    dup.exIds=exIds; stamp(dup);
+    dup.exIds=exIds; dup.exNames=exNames; stamp(dup);
   } else {
-    DB.templates.push(stamp({id:uid(), name, exIds}));
+    DB.templates.push(stamp({id:uid(), name, exIds, exNames}));
   }
   save(); renderTemplates(); toast(`テンプレ「${name}」を保存しました（${exIds.length}種目）`);
 }
@@ -3270,6 +3496,7 @@ function renderHistory(){
   const cdByDate={}; cardioList().forEach(c=>{ if(c && c.date) (cdByDate[c.date]=cdByDate[c.date]||[]).push(c); });
   if(DB.logs.length===0 && !Object.keys(cdByDate).length){ box.innerHTML='<div class="empty">まだ記録がありません</div>'; return; }
   const byDate={}; DB.logs.forEach(l=>{ (byDate[l.date]=byDate[l.date]||[]).push(l); });
+  Object.keys(byDate).forEach(d=>{ byDate[d]=sortDayLogs(byDate[d]); });   // 記録タブで並べ替えた順に合わせる（2026-08-03）
   const allDates=Array.from(new Set(Object.keys(byDate).concat(Object.keys(cdByDate))));
   box.innerHTML=allDates.sort().reverse().map(d=>{
     const dayLogs=byDate[d]||[], dayCd=cdByDate[d]||[];
@@ -4101,10 +4328,11 @@ function migrateStaminaTemplate(){
   const NAME='持久コア(約10分)';
   DB.templates=DB.templates||[];
   if(!DB.templates.some(t=>t && t.name===NAME)){
-    const exIds=['プランク','サイドプランク','ショルダーブリッジ','キャット&カウ']
-      .map(n=>{ const e=DB.exercises.find(x=>x.name===n); return e? e.id : null; })
-      .filter(Boolean);
-    if(exIds.length) DB.templates.push(stamp({id:uid(), name:NAME, exIds}));
+    // ⚠️ 端末ごとに走るので exIds は端末固有の値になる。**exNames を併記しないと相手端末で参照切れ**（2026-08-03）
+    const exNames=['プランク','サイドプランク','ショルダーブリッジ','キャット&カウ']
+      .filter(n=>DB.exercises.some(x=>x.name===n));
+    const exIds=exNames.map(n=>DB.exercises.find(x=>x.name===n).id);
+    if(exIds.length) DB.templates.push(stamp({id:uid(), name:NAME, exIds, exNames}));
   }
   DB.settings.staminaTplV1=true; save();
 }
@@ -4446,6 +4674,10 @@ async function syncNow(){
 // pullでデータが変わったときの再描画。initRender()は呼ばない（日付欄のリセットと移行処理の再実行を避ける）
 function syncRerender(){
   try{
+    // pullで相手端末の旧形式テンプレ（exIdsのみ）が入ってくることがある。
+    // この端末で全部解決できるならここで名前ベースに直す＝次のpushで相手も直る（2026-08-03）
+    migrateTplNames();
+    if(dedupeTemplates()) toast('定型メニューの重複をまとめました');
     applyTheme();
     fillFilter(); fillExSelect(); renderExList();
     renderTodayLogs(); renderRecommend(); renderTemplates();
@@ -4485,6 +4717,8 @@ function initRender(){
   migrateStretch();
   migrateRename9090();   // migrateStretchの直後＝新規追加が済んでから改名する
   migrateStaminaTemplate();   // 定型メニュー「持久コア(約10分)」＝種目マスタの移行が全部終わった後（名前引きのため）
+  migrateTplNames();          // 旧形式テンプレ（exIdsのみ）を名前ベースへ。**種目マスタが揃った後でないと解決できない**
+  dedupeTemplates();          // 同名・同内容のテンプレ重複を1本に（migrateTplNamesの後＝exNamesが入ってから判定する）
   applyTheme();
   fillCardioKinds();
   const av=document.getElementById('app-version'); if(av) av.textContent=APP_VERSION;
@@ -4504,7 +4738,7 @@ function initRender(){
     setTimeout(()=>{ syncPull({auto:true}).catch(()=>{}).then(syncBootDone, syncBootDone); }, 0);
   }
 }
-document.getElementById('rec-date').addEventListener('change',()=>{ renderTodayLogs(); });
+document.getElementById('rec-date').addEventListener('change',()=>{ reorderMode=false; renderTodayLogs(); });
 initRender();
 requestPersistentStorage(); // 起動時に永続ストレージを要求（結果は内部保持・ラベル更新）
 // PWA: Service Worker登録（オフライン起動・ホーム画面アプリ用）
