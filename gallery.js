@@ -292,6 +292,7 @@ window.GALLERY = {
     "ワンレッグヒップリフト": "images/exercises/rS58_c3.jpg",
     "スミスマシンカーフレイズ": "images/exercises/rS58_c4.jpg",
     // ストレッチ（2026-08-02l）。もも裏／胸椎回旋／股関節90/90 はカード未完成のため未登録＝人体図フォールバック
+    "お尻のストレッチ": "images/exercises/rS63_c1.jpg",
     "もも裏のストレッチ": "images/exercises/rS62_c1.jpg",
     "胸椎回旋ストレッチ": "images/exercises/rS62_c2.jpg",
     "腸腰筋のストレッチ": "images/exercises/rS60_c2.jpg",
