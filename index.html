@@ -910,6 +910,7 @@ const SECONDARY = {
   "ダンベルショルダープレス(スタンディング)":["triceps","core"], "ダンベルショルダープレス(シーテッド)":["triceps"],
   "アーノルドプレス":["triceps"],
   "アップライトロウ":["biceps"], "フェイスプル":["back"],
+  "リアデルトフライ(マシン)":["back"],   // 腕を後ろへ開く＝肩甲骨を寄せるので僧帽筋中部が働く。リバースペックデッキ／マシンリアデルトと統一（2026-08-04）
   "マシンサイドレイズ":["back"],   // 青=僧帽筋上部（2026-08-02追加）
   "ナローベンチプレス":["chest","shoulder"], "ディップス(三頭)":["chest","shoulder"],
   "バーベルスクワット":["core","back"],
@@ -921,7 +922,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.03d";
+const APP_VERSION="2026.08.04b";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -2260,17 +2261,21 @@ function supplementHTML(){
   // 画像が無い名前は従来どおりテキストのみ＝タップ不可。
   const galImg=(window.GALLERY&&window.GALLERY.exerciseImages)||{};
   const rows=items.map(it=>{
+    // 🖼＝カード画像がある行はタップで全画面表示。**モビリティだけでなく強化種目の行も対象**
+    //    （2026-08-04・ユーザー要望「補うといいことに出てくる種目をクリックすると画像を表示」）。
+    //    有酸素は種目ではないのでカードを持たない＝従来どおりテキストのみ。
+    const f = it.kind==='cardio' ? null : galImg[it.name];
+    const tapC = f ? ' sup-tap' : '';
+    const tapA = f ? ` role="button" tabindex="0" title="カードを表示" onclick="openPoster('${esc(f)}')"` : '';
+    const img  = f ? '<span class="sup-img">🖼</span>' : '';
     if(it.kind==='mob'){
-      const f=galImg[it.name];
-      const tapC=f?' sup-tap':'';
-      const tapA=f?` role="button" tabindex="0" title="カードを表示" onclick="openPoster('${esc(f)}')"`:'';
       return `<div class="sup-item mob${tapC}"${tapA}><span class="sup-dot"></span><div class="sup-body">`
-        +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">モビリティ</span>${f?'<span class="sup-img">🖼</span>':''}</div>`
+        +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">モビリティ</span>${img}</div>`
         +`<div class="sup-why">${esc(it.why)}。<span class="sup-dose">${esc(it.how)}・記録は不要</span></div></div></div>`;
     }
     const tag = it.kind==='cardio' ? '有酸素' : '強化';
-    return `<div class="sup-item"><span class="sup-dot"></span><div class="sup-body">`
-      +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">${tag}</span></div>`
+    return `<div class="sup-item${tapC}"${tapA}><span class="sup-dot"></span><div class="sup-body">`
+      +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">${tag}</span>${img}</div>`
       +`<div class="sup-why">${esc(it.why)}</div></div></div>`;
   }).join('');
   return head+rows+`<p class="sub">一般的なガイドラインに基づく自動提案です（最大5件）。痛みがある場合は行わず専門家に相談してください。</p></div>`;
@@ -2920,6 +2925,13 @@ const LOAD_OVERRIDE = {
   "Lシット": {core:0.75, legs:0.5, triceps:0.5},
   "ケーブルオーバーヘッドエクステンション": {triceps:1.0, shoulder:0.25, core:0.25},
   "ケーブルワンハンドサイドレイズ": {shoulder:1.0, back:0.25, core:0.25},
+  // I. 三角筋後部マシンの統一（2026-08-04・ユーザー指摘「同じマシン・同じ動作で補助筋が違うのはおかしい」）
+  //    リアデルトフライ(マシン)／リバースペックデッキ／マシンリアデルト は**同じマシンの呼び名違い**。
+  //    リアデルトフライ(マシン)だけ sec が空で背中が0だった（＝どの名前で記録したかで背中のセット数が変わっていた）。
+  //    ここに明示しておけば **stored sec に関係なく過去ログにも遡って効く**（DBを触らずに揃う）。
+  "リアデルトフライ(マシン)": {shoulder:1.0, back:0.5},
+  "リバースペックデッキ":     {shoulder:1.0, back:0.5},
+  "マシンリアデルト":         {shoulder:1.0, back:0.5},
   // H. ストレッチ（2026-08-02l）＝**空オブジェクト**。loadFactors() が {} を返し computeStats のループが
   //    空回りするので、記録してもどの部位にも 0 しか足さない（週セット数・レーダー・筋力判定に一切算入しない）。
   //    集計コード（computeStats/metricVals/subBreakdown）を1行も変えずに「記録は任意・負荷ゼロ」を実現する要。
@@ -3102,7 +3114,9 @@ const SUB_MAP = {
   "サイドレイズ(シーテッド)":          { shoulder:{side:1} },
   "フロントレイズ":                    { shoulder:{front:1} },
   "リアレイズ":                        { shoulder:{rear:1} },
-  "リアデルトフライ(マシン)":          { shoulder:{rear:1} },
+  // 三角筋後部マシンの3種（リアデルトフライ(マシン)／リバースペックデッキ／マシンリアデルト）は
+  // **同じマシン・同じ動作の呼び名違い**なので、サブ筋の内訳も揃える（2026-08-04・ユーザー指摘）
+  "リアデルトフライ(マシン)":          { shoulder:{rear:1}, back:{trap:.7, lat:.3} },
   "アップライトロウ":                  { shoulder:{side:.7, front:.3}, biceps:{bi:.6, forearm:.4} },
   "フェイスプル":                      { shoulder:{rear:1}, back:{trap:1} },
   "プッシュプレス":                    { shoulder:{front:.7, side:.3}, triceps:{tri:1}, legs:{quad:.6, glute:.4} },
@@ -3119,7 +3133,7 @@ const SUB_MAP = {
   "ケーブルリアデルトロウ":            { shoulder:{rear:1}, back:{trap:.6, lat:.4}, biceps:{bi:.7, forearm:.3} },
   "ダンベルZプレス":                   { shoulder:{front:.6, side:.4}, triceps:{tri:1}, core:{deep:.6, abs:.4} },
   "Yレイズ":                           { shoulder:{rear:.6, side:.4}, back:{trap:1} },
-  "マシンリアデルト":                  { shoulder:{rear:1}, back:{trap:1} },
+  "マシンリアデルト":                  { shoulder:{rear:1}, back:{trap:.7, lat:.3} },   // ↑3種で統一（2026-08-04）
   "ケーブルワンハンドサイドレイズ":    { shoulder:{side:1}, back:{trap:1}, core:{oblique:.6, deep:.4} },
   "ハーフニーリングプレス":            { shoulder:{front:.7, side:.3}, triceps:{tri:1}, core:{deep:.5, oblique:.5} },
   "マシンサイドレイズ":                { shoulder:{side:1}, back:{trap:1} },
@@ -4323,6 +4337,19 @@ function migrateRename9090(){
 // 定型メニュー「持久コア(約10分)」を一度だけ追加する（2026-08-02f）。
 // 位置づけ＝ユーザーが消してよいユーザーデータ。フラグで一度きり＝消しても復活しない。同名テンプレがあれば何もしない。
 // 等尺性（プランク系）は回数欄に秒を入れて記録する運用（ケーゲルの「回数=時間」と同型・新機構は作らない）。
+// 三角筋後部マシンの補助筋を揃える（2026-08-04）。
+// ⚠️ **stored sec を直す必要がある**＝`targetsOf()` は `ex.sec || SECONDARY[ex.name]` の順で見るが、
+//    既存ユーザーの `ex.sec` は初回生成時の **空配列 `[]`（truthy）** なので SECONDARY へ落ちてこない。
+//    集計側は LOAD_OVERRIDE で既に揃っているので、これは**人体図・種目リストのドット表示**のための移行。
+function migrateRearDeltSec(){
+  if(DB.settings.rearDeltSecV1) return;
+  const ex=DB.exercises.find(e=>e.name==='リアデルトフライ(マシン)');
+  if(ex){
+    const sec=Array.isArray(ex.sec)?ex.sec:[];
+    if(sec.indexOf('back')<0){ ex.sec=sec.concat('back'); stamp(ex); }
+  }
+  DB.settings.rearDeltSecV1=true; save();
+}
 function migrateStaminaTemplate(){
   if(DB.settings.staminaTplV1) return;
   const NAME='持久コア(約10分)';
@@ -4716,6 +4743,7 @@ function initRender(){
   migrateMachineSideRaise();
   migrateStretch();
   migrateRename9090();   // migrateStretchの直後＝新規追加が済んでから改名する
+  migrateRearDeltSec();  // 三角筋後部マシン3種の補助筋を揃える（表示用。集計はLOAD_OVERRIDEで既に統一）
   migrateStaminaTemplate();   // 定型メニュー「持久コア(約10分)」＝種目マスタの移行が全部終わった後（名前引きのため）
   migrateTplNames();          // 旧形式テンプレ（exIdsのみ）を名前ベースへ。**種目マスタが揃った後でないと解決できない**
   dedupeTemplates();          // 同名・同内容のテンプレ重複を1本に（migrateTplNamesの後＝exNamesが入ってから判定する）
