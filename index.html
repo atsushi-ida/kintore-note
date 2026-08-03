@@ -894,7 +894,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02m";
+const APP_VERSION="2026.08.02n";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1264,11 +1264,11 @@ function updateMuscleMap(){
 // 末尾4つは股関節まわりのストレッチ（2026-08-02n追加）。骨盤の傾きと股関節の硬さは骨盤底の働きに直結する。
 // ⚠️足首・大胸筋・広背筋・胸椎回旋の4つは骨盤底と無関係なので**入れない**
 const PELVIC_NAMES=["肛門開閉(骨盤底筋)","ドローイン","ヒップリフト(ヒップブリッジ)","ヒップスラスト","ワイドスクワット(相撲)","スプリットスクワット","内転筋トレ(アダクション)","アダクション(内転)","バックキック(臀部)",
-  "腸腰筋のストレッチ","内転筋のストレッチ","股関節90/90","もも裏のストレッチ"];
+  "腸腰筋のストレッチ","内転筋のストレッチ","お尻のストレッチ","もも裏のストレッチ"];
 const GLUTE_NAMES=["ヒップスラスト","ヒップリフト(ヒップブリッジ)","バックキック(臀部)","クラムシェル","ショルダーブリッジ","ブルガリアンスクワット","ワイドスクワット(相撲)","スプリットスクワット","ランジ","アブダクション(外転)","ルーマニアンデッドリフト"];
 const PILATES_NAMES=["ハンドレッド","ロールアップ","ロールオーバー","シングルレッグストレッチ","ダブルレッグストレッチ","ティーザー","レッグサークル","スイミング","スワン","キャット&カウ","バードドッグ","サイドキック","ショルダーブリッジ","クラムシェル","プランク","サイドプランク"];
 // ストレッチ（2026-08-02l）。並びは他の一覧と同じ EX_COLLATOR('ja') 順に固定してある
-const STRETCH_NAMES=["もも裏のストレッチ","胸椎回旋ストレッチ","股関節90/90","広背筋のストレッチ","足首の背屈ストレッチ","大胸筋のストレッチ","腸腰筋のストレッチ","内転筋のストレッチ"];
+const STRETCH_NAMES=["もも裏のストレッチ","胸椎回旋ストレッチ","お尻のストレッチ","広背筋のストレッチ","足首の背屈ストレッチ","大胸筋のストレッチ","腸腰筋のストレッチ","内転筋のストレッチ"];
 const CATEGORIES={ glute:{label:'お尻',names:GLUTE_NAMES}, pelvic:{label:'精力・骨盤底',names:PELVIC_NAMES}, pilates:{label:'ピラティス',names:PILATES_NAMES}, stretch:{label:'ストレッチ',names:STRETCH_NAMES} };
 function fillFilter(){
   const s=document.getElementById('rec-filter');
@@ -1610,7 +1610,7 @@ const FREQ_HIGH = new Set([  // 週3〜5回（低負荷・自重の体幹/骨盤
   'プランク','サイドプランク','スーパーマン','クラムシェル',
   // ストレッチ8種（2026-08-02l）＝負荷ゼロなので毎日でもよいが、目安は週3〜5回に揃える
   'もも裏のストレッチ','腸腰筋のストレッチ','内転筋のストレッチ','足首の背屈ストレッチ',
-  '大胸筋のストレッチ','広背筋のストレッチ','胸椎回旋ストレッチ','股関節90/90',
+  '大胸筋のストレッチ','広背筋のストレッチ','胸椎回旋ストレッチ','お尻のストレッチ',
 ]);
 function freqHint(exName){
   if(FREQ_LOW.has(exName))  return {text:'週1〜2回', min:1};
@@ -1885,7 +1885,7 @@ const MOBILITY_BY_GOAL = {
   ],
   squat: [
     {name:'足首の背屈ストレッチ', how:'30秒×2',  why:'深くしゃがむときの最大の制限要因'},
-    {name:'股関節90/90',          how:'各側30秒', why:'股関節の内外旋が出ないと膝が内に入る'},
+    {name:'お尻のストレッチ',          how:'各側30秒', why:'股関節の内外旋が出ないと膝が内に入る'},
     {name:'内転筋のストレッチ',   how:'30秒×2',  why:'ワイドスタンスの底で突っ張る'},
   ],
   bench: [
@@ -1917,7 +1917,7 @@ const KEGEL_SUPPORT = {
   mobility: [
     {name:'腸腰筋のストレッチ', how:'各側30秒', why:'骨盤が前に倒れたままだと骨盤底が働きにくい'},
     {name:'内転筋のストレッチ', how:'30秒×2',  why:'内転筋は骨盤底筋と一緒に収縮する＝連動が最も強い'},
-    {name:'股関節90/90',        how:'各側30秒', why:'股関節の外旋筋が硬いと骨盤底が緊張しっぱなしになる'},
+    {name:'お尻のストレッチ',        how:'各側30秒', why:'股関節の外旋筋が硬いと骨盤底が緊張しっぱなしになる'},
     {name:'もも裏のストレッチ', how:'30秒×2',  why:'硬いと骨盤が後ろに倒れ、骨盤底の位置が崩れる'},
   ],
   cardio: '有酸素を週150分（血管機能の改善は運動の中で最もエビデンスが厚い）',
@@ -2705,7 +2705,7 @@ const LOAD_OVERRIDE = {
   "大胸筋のストレッチ": {},
   "広背筋のストレッチ": {},
   "胸椎回旋ストレッチ": {},
-  "股関節90/90": {},
+  "お尻のストレッチ": {},
 };
 function loadFactors(ex){
   const o = LOAD_OVERRIDE[ex.name];
@@ -4068,10 +4068,28 @@ function migrateStretch(){
     ["もも裏のストレッチ","legs",[]],["腸腰筋のストレッチ","legs",[]],
     ["内転筋のストレッチ","legs",[]],["足首の背屈ストレッチ","legs",[]],
     ["大胸筋のストレッチ","chest",[]],["広背筋のストレッチ","back",[]],
-    ["胸椎回旋ストレッチ","back",[]],["股関節90/90","legs",[]],
+    ["胸椎回旋ストレッチ","back",[]],["お尻のストレッチ","legs",[]],
   ];
   ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
   DB.settings.stretchV1=true; save();
+}
+// v2026.08.02l/m で配った「股関節90/90」を「お尻のストレッチ」に改名（2026-08-02o）。
+// GPTが2回とも90/90の座位を描けずピジョンポーズになったため、絵に合わせて名前を変えた。
+// **idは維持**＝この種目に付いたログは迷子にならない。**旧名の墓標を立てる**＝旧版のまま同期している端末から
+// 「股関節90/90」がpullで復活するのを防ぐ（mergeDBは種目をnameでキーにするため）。
+function migrateRename9090(){
+  if(DB.settings.rename9090V1) return;
+  const OLD='股関節90/90', NEW='お尻のストレッチ';
+  const old=DB.exercises.find(e=>e.name===OLD);
+  if(old){
+    if(DB.exercises.some(e=>e.name===NEW && e.id!==old.id)){
+      DB.exercises=DB.exercises.filter(e=>e.id!==old.id);   // 既に新名がある＝重複なので旧側を落とす
+    } else {
+      old.name=NEW; stamp(old);
+    }
+    addTomb('ex', OLD);
+  }
+  DB.settings.rename9090V1=true; save();
 }
 // 定型メニュー「持久コア(約10分)」を一度だけ追加する（2026-08-02f）。
 // 位置づけ＝ユーザーが消してよいユーザーデータ。フラグで一度きり＝消しても復活しない。同名テンプレがあれば何もしない。
@@ -4463,6 +4481,7 @@ function initRender(){
   migrateBenchPartial();
   migrateMachineSideRaise();
   migrateStretch();
+  migrateRename9090();   // migrateStretchの直後＝新規追加が済んでから改名する
   migrateStaminaTemplate();   // 定型メニュー「持久コア(約10分)」＝種目マスタの移行が全部終わった後（名前引きのため）
   applyTheme();
   fillCardioKinds();
