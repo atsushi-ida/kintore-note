@@ -894,7 +894,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.02o";
+const APP_VERSION="2026.08.02p";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -3441,8 +3441,10 @@ function garminKind(t){
   const has=(...a)=>a.some(x=>s.indexOf(x)>=0);
   if(has('筋力','ウエイト','ウェイト','strength','weight train')) return null;
   if(has('ヨガ','yoga','ストレッチ','stretch','ピラティス','pilates')) return null;
-  if(has('ウォーキング','ウオーキング','散歩','walk')) return 'walk';
-  if(has('ランニング','ジョギング','トレッドミル','run','treadmill','jog')) return 'run';
+  // ⚠️実CSVで判明（2026-08-02）＝Garmin日本語版のタイプは**短縮形**（「ラン」「ウォーク」）。
+  // 「ランニング」「ウォーキング」だけを見ていると実データが1件も一致しない。短縮形を必ず含めること。
+  if(has('ウォーキング','ウオーキング','ウォーク','ウオーク','散歩','walk')) return 'walk';
+  if(has('ランニング','ジョギング','トレッドミル','ラン','run','treadmill','jog')) return 'run';
   if(has('サイクリング','バイク','自転車','cycl','bik','spin')) return 'bike';
   if(has('水泳','スイミング','プール','swim')) return 'swim';
   if(has('ハイキング','登山','トレッキング','hik','trek')) return 'hike';
