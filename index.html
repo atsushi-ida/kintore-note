@@ -922,7 +922,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.04b";
+const APP_VERSION="2026.08.04c";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1298,10 +1298,109 @@ const PILATES_NAMES=["ハンドレッド","ロールアップ","ロールオー�
 // ストレッチ（2026-08-02l）。並びは他の一覧と同じ EX_COLLATOR('ja') 順に固定してある
 const STRETCH_NAMES=["もも裏のストレッチ","胸椎回旋ストレッチ","お尻のストレッチ","広背筋のストレッチ","足首の背屈ストレッチ","大胸筋のストレッチ","腸腰筋のストレッチ","内転筋のストレッチ"];
 const CATEGORIES={ glute:{label:'お尻',names:GLUTE_NAMES}, pelvic:{label:'精力・骨盤底',names:PELVIC_NAMES}, pilates:{label:'ピラティス',names:PILATES_NAMES}, stretch:{label:'ストレッチ',names:STRETCH_NAMES} };
+//=========== 器具（2026-08-04） ===========
+// ⚠️ **種目名は変えない**。器具は「表示とフィルタ」だけに使う静的テーブル＝DB・同期・集計・カード画像に一切触らない。
+//    種目名に器具を焼き込むリネーム案は、カードのタイトル帯も作り直しになるので採らなかった。
+//    分類はカードの絵が正（実物を見て フロアプレス=ダンベル／ノルディックハムカール=自重／
+//    ヒップヒンジ=バーベル／カーフレイズ(スタンディング)=自重 を修正済み）。
+const EQ_MEMBERS = {
+  bb: [   // バーベル（46）
+    "ベンチプレス(フラット)", "インクラインベンチプレス(30°)", "インクラインベンチプレス(45°)", "インクラインベンチプレス(60°)", "デクラインベンチプレス",
+    "ワイドグリップベンチプレス", "ベンチプレス(パーシャル)", "ナローベンチプレス", "JMプレス", "デッドリフト(コンベンショナル)", "デッドリフト(スモウ)", "ベントオーバーロウ",
+    "Tバーロウ", "シュラッグ(僧帽筋)", "パワークリーン", "ペンドレイロウ", "ラックプル", "シールロウ", "ランドマインロウ", "ジェファーソンカール",
+    "ショルダープレス(スタンディング)", "ショルダープレス(シーテッド)", "アップライトロウ", "プッシュプレス", "ランドマインプレス", "バーベルカール(スタンディング)",
+    "バーベルカール(シーテッド)", "プリーチャーカール", "ドラッグカール", "リストカール", "リバースリストカール", "リバースカール", "バーベルスクワット(パラレル)",
+    "バーベルスクワット(フル)", "バーベルスクワット(フルボトム)", "バーベルスクワット(ハーフ)", "バーベルスクワット(クォーター)", "フロントスクワット", "ルーマニアンデッドリフト",
+    "ヒップスラスト", "グッドモーニング", "ジェファーソンスクワット", "ハックリフト", "オーバーヘッドスクワット", "スラスター", "ヒップヒンジ",
+  ],
+  db: [   // ダンベル（47）
+    "フロアプレス", "ダンベルプレス", "インクラインダンベルプレス", "ダンベルフライ", "インクラインダンベルフライ", "ワンハンドダンベルロウ", "プルオーバー", "ファーマーズウォーク",
+    "レネゲードロウ", "インクラインシュラッグ", "インクラインベンチロウ", "ダンベルショルダープレス(スタンディング)", "ダンベルショルダープレス(シーテッド)", "アーノルドプレス",
+    "サイドレイズ(スタンディング)", "サイドレイズ(シーテッド)", "フロントレイズ", "リアレイズ", "ダンベルZプレス", "スコットプレス", "ハーフニーリングプレス", "ダンベルスナッチ",
+    "ダンベルカール(スタンディング)", "ダンベルカール(シーテッド)", "ハンマーカール(スタンディング)", "ハンマーカール(シーテッド)", "インクラインダンベルカール",
+    "コンセントレーションカール", "ゾットマンカール", "スパイダーカール", "クロスボディハンマーカール", "フレンチプレス", "ライイングエクステンション", "キックバック", "テイトプレス",
+    "ランジ", "ブルガリアンスクワット", "ゴブレットスクワット", "ステップアップ", "サイドランジ", "カーフレイズ(シーテッド)", "コサックスクワット", "スーツケースキャリー",
+    "シングルレッグルーマニアンデッドリフト", "ヒールエレベーテッドスクワット", "ステップダウン", "サイドベント",
+  ],
+  machine: [   // マシン（32）
+    "チェストプレス(マシン)", "ペックフライ(マシン)", "マシンチェストプレス(片手)", "ラットプルダウン", "ビハインドネックプルダウン", "シーテッドロウ", "ハイロウ(マシン)",
+    "アシストチンニング(マシン)", "チェストサポーテッドロウ", "スパインローイング", "リアデルトフライ(マシン)", "マシンショルダープレス", "マシンリアデルト", "マシンサイドレイズ",
+    "リバースペックデッキ", "レッグプレス", "レッグエクステンション", "レッグカール", "アダクション(内転)", "アブダクション(外転)", "ハックスクワット", "ヒップアダクションマシン",
+    "ペンドラムスクワット", "ベルトスクワット", "シーテッドカーフレイズマシン", "カーフプレス", "ドンキーカーフレイズ", "グルートハムレイズ", "リバースハイパー", "ロータリートルソー",
+    "アブクランチ(マシン)", "バックエクステンション",
+  ],
+  cable: [   // ケーブル（22）
+    "ケーブルクロスオーバー", "ストレートアームケーブルフライ", "ストレートアームプルダウン", "ワンハンドケーブルロウ", "ケーブルサイドレイズ", "ケーブルワンハンドサイドレイズ", "フェイスプル",
+    "ケーブルリアデルトロウ", "ケーブルカール", "ケーブルハンマーカール", "ケーブルストレートバーカール", "プレスダウン", "トライセプスエクステンション",
+    "ケーブルオーバーヘッドエクステンション", "ケーブルキックバック", "ケーブルクランチ", "ケーブルウッドチョップ", "パロフプレス", "ケーブルプルスルー", "ケーブルヒップエクステンション",
+    "スタンディングアブダクション", "バックキック(臀部)",
+  ],
+  smith: [   // スミスマシン（4）
+    "スミスマシンベンチプレス", "スミスマシンスクワット", "スミスマシンショルダープレス", "スミスマシンカーフレイズ",
+  ],
+  kb: [   // ケトルベル（5）
+    "ケトルベルスイング", "ケトルベルクリーン", "ケトルベルウィンドミル", "ボトムズアップケトルベルプレス", "ターキッシュゲットアップ",
+  ],
+  body: [   // 自重（81）
+    "カーフレイズ(スタンディング)", "ノルディックハムカール", "腕立て伏せ", "ディップス(胸)", "デクラインプッシュアップ", "ヒンズープッシュアップ", "アンイーブンプッシュアップ",
+    "ワンアームプッシュアップ", "アーチャープッシュアップ", "ダイヤモンドプッシュアップ", "懸垂(チンニング)", "斜め懸垂", "チンアップ(逆手懸垂)", "スーパーマン", "スイミング",
+    "スワン", "キャット&カウ", "バードドッグ", "パイクプッシュアップ", "Yレイズ", "ディップス(三頭)", "ベンチディップス", "パラレルバーディップス", "クラブウォーク", "クランチ",
+    "シットアップ", "レッグレイズ", "ハンギングレッグレイズ", "プランク", "サイドプランク", "アブローラー", "ロシアンツイスト", "バイシクルクランチ", "ドラゴンフラッグ",
+    "ホローボディホールド", "デッドバグ", "マウンテンクライマー", "ベアクロール", "Vシットアップ", "ウィンドシールドワイパー", "ジャックナイフ", "トウタッチクランチ",
+    "デクラインクランチ", "リバースクランチ", "トウズトゥバー", "ニートゥチェスト", "Lシット", "ハンギングニーレイズ", "スパインプレス", "ハンドレッド", "ロールアップ",
+    "ロールオーバー", "シングルレッグストレッチ", "ダブルレッグストレッチ", "ティーザー", "レッグサークル", "サイドキック", "ショルダーブリッジ", "クラムシェル", "肛門開閉(骨盤底筋)",
+    "ドローイン", "ヒップリフト(ヒップブリッジ)", "ワイドスクワット(相撲)", "スプリットスクワット", "内転筋トレ(アダクション)", "ピストルスクワット", "ジャンプスクワット",
+    "ボックスジャンプ", "ジャンピングランジ", "グルートブリッジマーチ", "シシースクワット", "シュリンプスクワット", "フロッグポンプ", "スケーターホップ", "カーフジャンプ",
+    "コペンハーゲンプランク", "バーピー", "ヒップアブダクション(サイドライイング)", "ワンレッグヒップリフト", "ベアハグスクワット", "ヒップシフトスクワット",
+  ],
+  other: [   // その他（3）
+    "バトルロープ", "メディシンボールスラム", "ランドマインツイスト",
+  ],
+  stretch: [   // ストレッチ（8）
+    "もも裏のストレッチ", "腸腰筋のストレッチ", "内転筋のストレッチ", "足首の背屈ストレッチ", "大胸筋のストレッチ", "広背筋のストレッチ", "胸椎回旋ストレッチ", "お尻のストレッチ",
+  ],
+};
+const EQ_LABEL = {bb:'バーベル', db:'ダンベル', machine:'マシン', cable:'ケーブル', smith:'スミスマシン',
+                  kb:'ケトルベル', body:'自重', other:'その他', stretch:'ストレッチ'};
+const EQ_ORDER = ['bb','db','machine','cable','smith','kb','body','other','stretch'];
+const EX_EQUIP = (()=>{ const m={}; Object.keys(EQ_MEMBERS).forEach(k=>EQ_MEMBERS[k].forEach(n=>{ m[n]=k; })); return m; })();
+function equipOf(name){ return EX_EQUIP[name] || ''; }
+// 器具違い・姿勢違いで散らばる系統だけ「まとめ名」を持つ（五十音順で隣り合わせるため）。
+// ここに無い種目は自分の名前がまとめ名＝並びは従来どおり。
+const EX_BASE = (()=>{
+  const g={
+    'ショルダープレス':['ショルダープレス(スタンディング)','ショルダープレス(シーテッド)','ダンベルショルダープレス(スタンディング)','ダンベルショルダープレス(シーテッド)','マシンショルダープレス','スミスマシンショルダープレス'],
+    'サイドレイズ':['サイドレイズ(スタンディング)','サイドレイズ(シーテッド)','ケーブルサイドレイズ','ケーブルワンハンドサイドレイズ','マシンサイドレイズ'],
+    'アームカール':['バーベルカール(スタンディング)','バーベルカール(シーテッド)','ダンベルカール(スタンディング)','ダンベルカール(シーテッド)','ケーブルカール','ケーブルストレートバーカール'],
+    'ハンマーカール':['ハンマーカール(スタンディング)','ハンマーカール(シーテッド)','ケーブルハンマーカール','クロスボディハンマーカール'],
+    'カーフレイズ':['カーフレイズ(スタンディング)','カーフレイズ(シーテッド)','シーテッドカーフレイズマシン','スミスマシンカーフレイズ','ドンキーカーフレイズ','カーフプレス'],
+    'キックバック(三頭)':['キックバック','ケーブルキックバック'],
+    'リアデルト':['リアレイズ','リアデルトフライ(マシン)','リバースペックデッキ','マシンリアデルト','ケーブルリアデルトロウ'],
+  };
+  const m={}; Object.keys(g).forEach(b=>g[b].forEach(n=>{ m[n]=b; })); return m;
+})();
+function baseOf(name){ return EX_BASE[name] || name; }
+// 一覧・セレクトの表示名。**器具語が名前に無いときだけ**器具を添える（「ケーブルサイドレイズ（ケーブル）」を避ける）
+function exLabel(name){
+  const eq=equipOf(name);
+  if(!eq || eq==='stretch') return name;
+  const lab=EQ_LABEL[eq];
+  return name.indexOf(lab)>=0 ? name : name+'（'+lab+'）';
+}
+// 部位内の並び：まとめ名 → 器具の既定順 → 名前
+function byExGroup(a,b){
+  const ba=baseOf(a.name), bb=baseOf(b.name);
+  if(ba!==bb) return EX_COLLATOR.compare(ba,bb);
+  const ea=EQ_ORDER.indexOf(equipOf(a.name)), eb=EQ_ORDER.indexOf(equipOf(b.name));
+  if(ea!==eb) return (ea<0?99:ea)-(eb<0?99:eb);
+  return EX_COLLATOR.compare(a.name,b.name);
+}
 function fillFilter(){
   const s=document.getElementById('rec-filter');
   const cats=Object.entries(CATEGORIES).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join('');
-  s.innerHTML='<option value="">全部位</option>'+PARTS.map(p=>`<option value="${p.key}">${p.name}</option>`).join('')+cats+'<option value="fav">★お気に入り</option>';
+  // 器具フィルタ（2026-08-04）。値は 'eq:<code>'＝既存の部位/カテゴリの値と衝突しない接頭辞にする
+  const eqs=EQ_ORDER.filter(k=>k!=='stretch').map(k=>`<option value="eq:${k}">${EQ_LABEL[k]}</option>`).join('');
+  s.innerHTML='<option value="">全部位</option>'+PARTS.map(p=>`<option value="${p.key}">${p.name}</option>`).join('')+cats+eqs+'<option value="fav">★お気に入り</option>';
   s.onchange=fillExSelect;
 }
 function fillExSelect(){
@@ -1317,14 +1416,15 @@ function fillExSelect(){
   } else {
     let list=DB.exercises.slice();
     if(filt==='fav') list=list.filter(e=>e.fav);
+    else if(filt.indexOf('eq:')===0) list=list.filter(e=>equipOf(e.name)===filt.slice(3));   // 器具フィルタ（2026-08-04）
     else if(filt) list=list.filter(e=>e.part===filt);
     const grouped={};
     list.forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
-    PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExName); });   // 部位内は五十音順
+    PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
     PARTS.forEach(p=>{
       if(!grouped[p.key]) return;
       const og=document.createElement('optgroup'); og.label=p.name;
-      grouped[p.key].forEach(e=>{ const o=document.createElement('option'); o.value=e.id; o.textContent=(e.fav?'★ ':'')+e.name; og.appendChild(o); });
+      grouped[p.key].forEach(e=>{ const o=document.createElement('option'); o.value=e.id; o.textContent=(e.fav?'★ ':'')+exLabel(e.name); og.appendChild(o); });
       sel.appendChild(og);
     });
   }
@@ -2818,8 +2918,12 @@ function renderExList(){
   const box=document.getElementById('ex-list');
   const q=(document.getElementById('ex-search').value||'').trim().toLowerCase();
   const grouped={};
-  DB.exercises.filter(e=>!q||e.name.toLowerCase().includes(q)).forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
-  PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExName); });   // 部位内は五十音順
+  // 検索は種目名に加えて**器具名とまとめ名**にも当てる（「ケーブル」「サイドレイズ」で引ける・2026-08-04）
+  const hit=e=>{ if(!q) return true;
+    const eq=equipOf(e.name);
+    return (e.name+' '+baseOf(e.name)+' '+(eq?EQ_LABEL[eq]:'')).toLowerCase().includes(q); };
+  DB.exercises.filter(hit).forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
+  PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
   const shown=Object.keys(grouped).reduce((a,k)=>a+grouped[k].length,0);
   document.getElementById('ex-count').textContent=q?`${shown} / ${DB.exercises.length}種目`:DB.exercises.length+'種目';
   let html='';
@@ -2836,7 +2940,7 @@ function renderExList(){
       const muscles=[dot('var(--mt-main)',primary),dot('var(--mt-sub)',secondary),dot('var(--mt-inv)',tertiary)].filter(Boolean).join(' &nbsp;');
       html+=`<div class="ex-item">
         <button class="star ${e.fav?'on':''}" onclick="toggleFav('${e.id}')">${ic('star')}</button>
-        <div class="nm">${esc(e.name)}<br><span class="muted" style="font-size:11px">${muscles}</span></div>
+        <div class="nm">${esc(exLabel(e.name))}<br><span class="muted" style="font-size:11px">${muscles}</span></div>
         <button class="btn sec small" onclick="showHowEx('${e.id}')">${ic('play')}</button>
         <button class="btn sec small" onclick="showImgEx('${e.id}')">${ic('image')}</button>
         <button class="star" onclick="editExercise('${e.id}')">${ic('pencil')}</button>
