@@ -106,6 +106,8 @@ window.GALLERY = {
     "ディップス(三頭)": "images/exercises/rS18_c2.jpg",
     "キックバック": "images/exercises/rS18_c3.jpg",
     "ライイングエクステンション": "images/exercises/rS18_c4.jpg",
+    "スカルクラッシャー(バーベル)": "images/exercises/rS64_c1.jpg",
+    "フレンチプレス(バーベル)": "images/exercises/rS64_c2.jpg",
     // ── 脚 ──
     "バーベルスクワット(パラレル)": "images/exercises/rS24_c3.jpg",
     "バーベルスクワット(フル)": "images/exercises/rS24_c3.jpg",

@@ -910,7 +910,7 @@ const SECONDARY = {
   "ダンベルショルダープレス(スタンディング)":["triceps","core"], "ダンベルショルダープレス(シーテッド)":["triceps"],
   "アーノルドプレス":["triceps"],
   "アップライトロウ":["biceps"], "フェイスプル":["back"],
-  "リアデルトフライ(マシン)":["back"],   // 腕を後ろへ開く＝肩甲骨を寄せるので僧帽筋中部が働く。リバースペックデッキ／マシンリアデルトと統一（2026-08-04）
+  "リアレイズ":["back"], "リアデルトフライ(マシン)":["back"],   // 腕を後ろへ開く＝肩甲骨を寄せるので僧帽筋中部が働く。リバースペックデッキ／マシンリアデルトと統一（2026-08-04）
   "マシンサイドレイズ":["back"],   // 青=僧帽筋上部（2026-08-02追加）
   "ナローベンチプレス":["chest","shoulder"], "ディップス(三頭)":["chest","shoulder"],
   "バーベルスクワット":["core","back"],
@@ -922,7 +922,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.04c";
+const APP_VERSION="2026.08.04f";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1008,6 +1008,13 @@ function addTomb(k, id){
   }catch(_){}
 }
 function partOf(k){ return PARTS.find(p=>p.key===k)||{name:"?",color:"#888"}; }
+// 種目一覧・セレクトの**表示グループ**（2026-08-04）。ストレッチは部位が脚/胸/背中に散っていて
+// 探しにくいので、独立した見出しにまとめる。⚠️**DBのpartは変えない**＝集計・人体図は従来どおり
+// （ストレッチはLOAD_OVERRIDEが{}なので、そもそもどの部位にも0しか足さない）。
+const STRETCH_GROUP={key:'_stretch', name:'ストレッチ', color:'#7a8a99'};
+function isStretchEx(e){ return equipOf(e.name)==='stretch'; }
+function listGroupKey(e){ return isStretchEx(e) ? STRETCH_GROUP.key : e.part; }
+function listGroups(){ return PARTS.concat([STRETCH_GROUP]); }
 // 種目の並び順＝日本語の五十音順（2026-08-01。238種目を目で探すため登録順から変更）。
 // 漢字始まりの種目（腕立て伏せ・懸垂など）は読みが分からないため末尾に固まる＝日本語ソートの仕様。
 const EX_COLLATOR = new Intl.Collator('ja');
@@ -1304,7 +1311,8 @@ const CATEGORIES={ glute:{label:'お尻',names:GLUTE_NAMES}, pelvic:{label:'精�
 //    分類はカードの絵が正（実物を見て フロアプレス=ダンベル／ノルディックハムカール=自重／
 //    ヒップヒンジ=バーベル／カーフレイズ(スタンディング)=自重 を修正済み）。
 const EQ_MEMBERS = {
-  bb: [   // バーベル（46）
+  bb: [   // バーベル（48）
+    "スカルクラッシャー(バーベル)", "フレンチプレス(バーベル)",
     "ベンチプレス(フラット)", "インクラインベンチプレス(30°)", "インクラインベンチプレス(45°)", "インクラインベンチプレス(60°)", "デクラインベンチプレス",
     "ワイドグリップベンチプレス", "ベンチプレス(パーシャル)", "ナローベンチプレス", "JMプレス", "デッドリフト(コンベンショナル)", "デッドリフト(スモウ)", "ベントオーバーロウ",
     "Tバーロウ", "シュラッグ(僧帽筋)", "パワークリーン", "ペンドレイロウ", "ラックプル", "シールロウ", "ランドマインロウ", "ジェファーソンカール",
@@ -1375,6 +1383,8 @@ const EX_BASE = (()=>{
     'ハンマーカール':['ハンマーカール(スタンディング)','ハンマーカール(シーテッド)','ケーブルハンマーカール','クロスボディハンマーカール'],
     'カーフレイズ':['カーフレイズ(スタンディング)','カーフレイズ(シーテッド)','シーテッドカーフレイズマシン','スミスマシンカーフレイズ','ドンキーカーフレイズ','カーフプレス'],
     'キックバック(三頭)':['キックバック','ケーブルキックバック'],
+    'スカルクラッシャー':['ライイングエクステンション','スカルクラッシャー(バーベル)'],
+    'フレンチプレス':['フレンチプレス','フレンチプレス(バーベル)'],
     'リアデルト':['リアレイズ','リアデルトフライ(マシン)','リバースペックデッキ','マシンリアデルト','ケーブルリアデルトロウ'],
   };
   const m={}; Object.keys(g).forEach(b=>g[b].forEach(n=>{ m[n]=b; })); return m;
@@ -1419,9 +1429,9 @@ function fillExSelect(){
     else if(filt.indexOf('eq:')===0) list=list.filter(e=>equipOf(e.name)===filt.slice(3));   // 器具フィルタ（2026-08-04）
     else if(filt) list=list.filter(e=>e.part===filt);
     const grouped={};
-    list.forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
-    PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
-    PARTS.forEach(p=>{
+    list.forEach(e=>{ const k=listGroupKey(e); (grouped[k]=grouped[k]||[]).push(e); });
+    listGroups().forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
+    listGroups().forEach(p=>{
       if(!grouped[p.key]) return;
       const og=document.createElement('optgroup'); og.label=p.name;
       grouped[p.key].forEach(e=>{ const o=document.createElement('option'); o.value=e.id; o.textContent=(e.fav?'★ ':'')+exLabel(e.name); og.appendChild(o); });
@@ -2922,12 +2932,12 @@ function renderExList(){
   const hit=e=>{ if(!q) return true;
     const eq=equipOf(e.name);
     return (e.name+' '+baseOf(e.name)+' '+(eq?EQ_LABEL[eq]:'')).toLowerCase().includes(q); };
-  DB.exercises.filter(hit).forEach(e=>{ (grouped[e.part]=grouped[e.part]||[]).push(e); });
-  PARTS.forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
+  DB.exercises.filter(hit).forEach(e=>{ const k=listGroupKey(e); (grouped[k]=grouped[k]||[]).push(e); });
+  listGroups().forEach(p=>{ if(grouped[p.key]) grouped[p.key].sort(byExGroup); });   // 器具違いが隣り合うよう「まとめ名→器具」順
   const shown=Object.keys(grouped).reduce((a,k)=>a+grouped[k].length,0);
   document.getElementById('ex-count').textContent=q?`${shown} / ${DB.exercises.length}種目`:DB.exercises.length+'種目';
   let html='';
-  PARTS.forEach(p=>{
+  listGroups().forEach(p=>{
     if(!grouped[p.key]) return;
     const open=q?true:!!exOpen[p.key];   // 検索中は常に開く（結果が見えないと検索の意味がない）
     html+=`<button class="ex-part" aria-expanded="${open}" onclick="toggleExPart('${p.key}')">
@@ -3033,6 +3043,7 @@ const LOAD_OVERRIDE = {
   //    リアデルトフライ(マシン)／リバースペックデッキ／マシンリアデルト は**同じマシンの呼び名違い**。
   //    リアデルトフライ(マシン)だけ sec が空で背中が0だった（＝どの名前で記録したかで背中のセット数が変わっていた）。
   //    ここに明示しておけば **stored sec に関係なく過去ログにも遡って効く**（DBを触らずに揃う）。
+  "リアレイズ":               {shoulder:1.0, back:0.5},   // ダンベル版も同じ水平外転＝肩甲骨を寄せる（2026-08-04）
   "リアデルトフライ(マシン)": {shoulder:1.0, back:0.5},
   "リバースペックデッキ":     {shoulder:1.0, back:0.5},
   "マシンリアデルト":         {shoulder:1.0, back:0.5},
@@ -3217,7 +3228,7 @@ const SUB_MAP = {
   "サイドレイズ(スタンディング)":      { shoulder:{side:1} },
   "サイドレイズ(シーテッド)":          { shoulder:{side:1} },
   "フロントレイズ":                    { shoulder:{front:1} },
-  "リアレイズ":                        { shoulder:{rear:1} },
+  "リアレイズ":                        { shoulder:{rear:1}, back:{trap:.7, lat:.3} },   // マシン3種と統一（2026-08-04）
   // 三角筋後部マシンの3種（リアデルトフライ(マシン)／リバースペックデッキ／マシンリアデルト）は
   // **同じマシン・同じ動作の呼び名違い**なので、サブ筋の内訳も揃える（2026-08-04・ユーザー指摘）
   "リアデルトフライ(マシン)":          { shoulder:{rear:1}, back:{trap:.7, lat:.3} },
@@ -3272,6 +3283,8 @@ const SUB_MAP = {
   "ディップス(三頭)":                  { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
   "キックバック":                      { triceps:{tri:1} },
   "ライイングエクステンション":        { triceps:{tri:1} },
+  "スカルクラッシャー(バーベル)":      { triceps:{tri:1} },
+  "フレンチプレス(バーベル)":          { triceps:{tri:1} },
   "ダイヤモンドプッシュアップ":        { triceps:{tri:1}, chest:{mid:1}, shoulder:{front:1} },
   "ベンチディップス":                  { triceps:{tri:1}, shoulder:{front:1}, chest:{mid:1} },
   "ケーブルキックバック":              { triceps:{tri:1}, shoulder:{rear:1}, back:{lat:1} },
@@ -4409,6 +4422,15 @@ function migrateMachineSideRaise(){ // サイドレイズの器具違いを分�
 // ストレッチ8種（2026-08-02l）。**記録は任意**＝やった記録を残したい人のためのマスタで、
 // 負荷は LOAD_OVERRIDE の {} により全部位ゼロ（集計・レーダー・筋力判定に一切算入しない）。
 // 「補うといいこと」のモビリティ提案と同じ名前に揃えてあるので、提案からカード画像も開ける。
+// 三頭のエクステンション系に**バーベル(EZバー)版が1つも無かった**ので追加（2026-08-04）。
+// 既存は トライセプスエクステンション=ケーブル／フレンチプレス・ライイングエクステンション=ダンベル。
+// 名前は探しやすさ優先で「スカルクラッシャー」を採用（ユーザーがこの名前で探した）。
+function migrateBarbellTriceps(){
+  if(DB.settings.bbTricepsV1) return;
+  const ADD=[["スカルクラッシャー(バーベル)","triceps",[]],["フレンチプレス(バーベル)","triceps",[]]];
+  ADD.forEach(([name,part,sec])=>{ if(!DB.exercises.some(e=>e.name===name)) DB.exercises.push({id:uid(),name,part,sec,fav:false}); });
+  DB.settings.bbTricepsV1=true; save();
+}
 function migrateStretch(){
   if(DB.settings.stretchV1) return;
   const ADD=[
@@ -4446,13 +4468,15 @@ function migrateRename9090(){
 //    既存ユーザーの `ex.sec` は初回生成時の **空配列 `[]`（truthy）** なので SECONDARY へ落ちてこない。
 //    集計側は LOAD_OVERRIDE で既に揃っているので、これは**人体図・種目リストのドット表示**のための移行。
 function migrateRearDeltSec(){
-  if(DB.settings.rearDeltSecV1) return;
-  const ex=DB.exercises.find(e=>e.name==='リアデルトフライ(マシン)');
-  if(ex){
+  // ⚠️ V1は「リアデルトフライ(マシン)」だけを対象に**既に実行済み**の端末がある。
+  //    対象を広げるときはフラグを増やす（V1を書き換えても再実行されないため）。
+  if(DB.settings.rearDeltSecV2) return;
+  ['リアデルトフライ(マシン)','リアレイズ'].forEach(nm=>{
+    const ex=DB.exercises.find(e=>e.name===nm); if(!ex) return;
     const sec=Array.isArray(ex.sec)?ex.sec:[];
     if(sec.indexOf('back')<0){ ex.sec=sec.concat('back'); stamp(ex); }
-  }
-  DB.settings.rearDeltSecV1=true; save();
+  });
+  DB.settings.rearDeltSecV1=true; DB.settings.rearDeltSecV2=true; save();
 }
 function migrateStaminaTemplate(){
   if(DB.settings.staminaTplV1) return;
@@ -4845,6 +4869,7 @@ function initRender(){
   migrateNewCards2026d();
   migrateBenchPartial();
   migrateMachineSideRaise();
+  migrateBarbellTriceps();   // 三頭のバーベル版2種（2026-08-04）
   migrateStretch();
   migrateRename9090();   // migrateStretchの直後＝新規追加が済んでから改名する
   migrateRearDeltSec();  // 三角筋後部マシン3種の補助筋を揃える（表示用。集計はLOAD_OVERRIDEで既に統一）
