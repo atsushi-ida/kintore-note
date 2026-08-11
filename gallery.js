@@ -122,6 +122,7 @@ window.GALLERY = {
     "ランジ": "images/exercises/rS10_c2.jpg",
     "ルーマニアンデッドリフト": "images/exercises/rS24_c4.jpg",
     "ヒップスラスト": "images/exercises/rS19_c4.jpg",
+    "マシンヒップスラスト": "images/exercises/rS67_c1.jpg",
     "カーフレイズ(スタンディング)": "images/exercises/rS25_c2.jpg",
     "カーフレイズ(シーテッド)": "images/exercises/rS20_c1.jpg",
     "アダクション(内転)": "images/exercises/rS20_c2.jpg",
