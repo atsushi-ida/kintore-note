@@ -937,7 +937,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.14b";
+const APP_VERSION="2026.08.14c";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1805,7 +1805,19 @@ function closeModal(){
   if(typeof kegelState!=='undefined' && kegelState){ clearInterval(kegelState.timerId); kegelState=null; releaseKegelWake(); } // ケーゲル中の後片付け
   document.getElementById('modal-bg').classList.remove('show');
 }
-document.getElementById('modal-bg').addEventListener('click',e=>{ if(e.target.id==='modal-bg') closeModal(); });
+// 背景タップで閉じる。**clickではなくpointerdown/upの両方で判定する**（2026-08-14）。
+// clickは「押した要素」と「離した要素」が違うとき**共通の祖先**で発火する仕様のため、
+// 入力欄の数字をドラッグ選択して行き過ぎ、モーダルの外で離すと e.target が modal-bg になり
+// 「背景クリック」と誤判定されて編集中のモーダルが勝手に閉じていた（PCで再現・報告2026-08-14）。
+let modalDownOnBg=false;
+document.getElementById('modal-bg').addEventListener('pointerdown',e=>{ modalDownOnBg = (e.target.id==='modal-bg'); });
+document.getElementById('modal-bg').addEventListener('pointercancel',()=>{ modalDownOnBg=false; });
+document.getElementById('modal-bg').addEventListener('pointerup',e=>{
+  const upOnBg = (e.target.id==='modal-bg');
+  const both = modalDownOnBg && upOnBg;   // 押した場所と離した場所が**両方とも**背景のときだけ閉じる
+  modalDownOnBg=false;
+  if(both) closeModal();
+});
 
 //=========== アドバイス機能（A:おすすめ / B:処方 / C:次回目安[showPrev内] / D:ケーゲル） ===========
 // 部位ごとの代表種目（記録が無いときのフォールバック）
