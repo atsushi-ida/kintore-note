@@ -414,6 +414,15 @@
   .sup-item.mob .sup-tag{background:var(--panel2); color:var(--sub); border-color:var(--line);}
   .sup-why{font-size:12px; color:var(--sub); line-height:1.6; margin-top:3px; overflow-wrap:anywhere;}
   .sup-why .sup-dose{color:var(--txt2); font-weight:600;}
+  /* 強化行だけに付く部位充足率の注記（2026-08-14）＝「足りている部位を勧めている」ことが分かるように小さく添える */
+  .sup-why .sup-note{display:inline-block; margin-left:6px; font-size:10.5px; color:var(--sub); opacity:.9;}
+  /* 集計から外している種目のバッジ（2026-08-14・種目一覧） */
+  .ex-badge{display:inline-block; margin-left:6px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:600;
+    background:var(--panel2); color:var(--sub); border:1px solid var(--line); vertical-align:1px;}
+  /* 推定1RM推移（2026-08-14・筋力タブ） */
+  .e1rm-pick{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .e1rm-pick select{flex:1; min-width:0;}
+  #e1rm-chart svg{width:100%; max-width:420px; display:block;}
   /* カード画像があるモビリティ行はタップでカード全画面（2026-08-02l。種目一覧の🖼と同じ挙動） */
   .sup-item.sup-tap{cursor:pointer;}
   .sup-item.sup-tap:active{opacity:.65;}
@@ -786,6 +795,12 @@
       <p class="muted">数値は一般的な目安（フリーウェイト・成人）で、体格・手足の長さ・専門性で変わります。種目間バランスはベンチプレスを基準に「強い/標準/弱い」を判定します。データが無い種目は表示されません。</p>
       <p class="muted mt"><b><i data-lucide="triangle-alert"></i> 可動域の前提</b>：基準値はすべて<b>フルレンジ</b>です。スクワットは<b>パラレル以下（太もも水平〜股関節が膝より下）</b>、ベンチは胸タッチ、デッドは床から。ハーフ／クォーターはもっと高重量を扱えるため、この基準と比べると実際より強く出ます。</p>
     </div>
+    <!-- 推定1RMの推移（2026-08-14）＝種目を選んでセッションごとの最高推定1RMを折れ線で見る -->
+    <div class="card">
+      <h2><i data-lucide="trending-up"></i> 推定1RMの推移 <span class="r" id="e1rm-label"></span></h2>
+      <div id="e1rm-pick"></div>
+      <div id="e1rm-chart"></div>
+    </div>
   </div>
 </div>
 
@@ -922,7 +937,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.14a";
+const APP_VERSION="2026.08.14b";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1565,6 +1580,31 @@ function copyPrev(){
   last.sets.forEach(s=>addSetRow(s.weight||'', s.reps, s.side||''));   // sideも復元（設計3-2）
   toast('前回の内容をコピーしました');
 }
+// 保存前の異常値チェック（2026-08-14）。同じ種目の**直前ログ**（日付が最新のもの）の最大重量と比べ、
+// ±25%を超えていたら一言だけ確認する。**ブロックではなく確認**＝初期重量込み表記への変更など、
+// 意図的な跳ね上がりはOKで通せる。初めての種目・自重(0/空)・回数のみの記録では何も出さない。
+const SANITY_HI=1.25, SANITY_LO=0.75;
+function maxWeightOf(sets){
+  return (sets||[]).reduce((m,s)=>{ const w=(s&&typeof s.weight==='number'&&isFinite(s.weight))?s.weight:0; return w>m?w:m; }, 0);
+}
+function prevLogOf(exId, excludeLogId){
+  let prev=null;
+  (DB.logs||[]).forEach(l=>{
+    if(!l || l.exId!==exId || (excludeLogId && l.id===excludeLogId)) return;
+    if(!prev || l.date>=prev.date) prev=l;   // 同じ日が複数あるときは後に入れた方を「直前」とみなす
+  });
+  return prev;
+}
+function weightSanityOK(exId, sets, excludeLogId){
+  try{
+    const cur=maxWeightOf(sets);           if(!(cur>0)) return true;   // 自重・回数のみ
+    const prev=prevLogOf(exId, excludeLogId); if(!prev)  return true;   // 初めての種目
+    const pw=maxWeightOf(prev.sets);       if(!(pw>0))  return true;   // 前回が自重
+    if(cur<=pw*SANITY_HI && cur>=pw*SANITY_LO) return true;
+    const fw=v=>String(Math.round(v*100)/100);
+    return confirm(`前回 ${fw(pw)}kg → 今回 ${fw(cur)}kg。この重量で保存しますか？`);
+  }catch(e){ return true; }   // 判定で転んでも保存は止めない（あくまで注意喚起）
+}
 // ログ追加の共通経路（saveLog / ケーゲル完了 が共用。二重実装しない）
 function addLogEntry(exId, sets, opts){
   opts=opts||{};
@@ -1593,6 +1633,7 @@ function saveLog(){
   });
   if(!exId){ toast('種目を選んでください'); return; }
   if(sets.length===0){ toast('回数を入力してください'); return; }
+  if(!weightSanityOK(exId, sets)) return;   // キャンセル＝保存しない（入力はそのまま残す）
   const rpe=parseInt(document.getElementById('rec-rpe').value);
   const memo=document.getElementById('rec-memo').value.trim();
   addLogEntry(exId, sets, {date, rpe:isNaN(rpe)?undefined:rpe, memo});
@@ -1748,6 +1789,9 @@ function saveEdit(id){
   // ord は触らない＝並びは「やった順」なので種目を替えても位置は動かない。
   const selEx=document.getElementById('m-ex');
   const newExId=selEx?selEx.value:'';
+  const tgtExId=(newExId && DB.exercises.some(e=>e.id===newExId)) ? newExId : l.exId;
+  // 異常値の一言確認（2026-08-14）。編集中の自分自身は「直前ログ」から除く。キャンセルなら何も書き換えない
+  if(!weightSanityOK(tgtExId, sets, id)) return;
   if(newExId && newExId!==l.exId && DB.exercises.some(e=>e.id===newExId)) l.exId=newExId;
   l.sets=sets; l.date=document.getElementById('m-date').value||l.date;
   const rpe=parseInt(document.getElementById('m-rpe').value); l.rpe=isNaN(rpe)?undefined:rpe;
@@ -2122,10 +2166,15 @@ function benchRatios(data){ // data: [{key,rm,...}] rm>0 の配列（length>=2 �
   return {anchor, base, rows:data.map(l=>{ const exp=base*BENCH_RATIO[l.key]; return {...l, exp, ratio:l.rm/exp}; })};
 }
 // 機能B：標準比率から最も下振れしているリフト1つ（5リフト中2つ未満の記録なら null）
+// ⚠️ 基準(anchor)自身の ratio は定義上いつも 1.00 ＝ **anchorが最弱に出るのは「他が全部標準比を上回った」とき**。
+//    そのまま「ベンチ基準比で弱め（100%）」と書くと自己矛盾になるので、anchorかどうかを添えて返す（2026-08-14）。
+//    返り値は従来の行オブジェクト（short/ratio等）＋ isAnchor ＝呼び出し側の既存参照はそのまま動く。
 function weakestLift(){
   const data=LIFT_DEFS.map(l=>({...l, rm:get1RM(l.ex)})).filter(l=>l.rm>0);
   if(data.length<2) return null;
-  return benchRatios(data).rows.slice().sort((a,b)=>a.ratio-b.ratio)[0];
+  const br=benchRatios(data);
+  const w=br.rows.slice().sort((a,b)=>a.ratio-b.ratio)[0];
+  return {...w, isAnchor: w.key===br.anchor.key};
 }
 // 機能B：アドバイスカード本体（分析タブ・診断の直後）。lastMap（renderBalanceで設定）を使う
 function renderAdvice(){
@@ -2162,7 +2211,11 @@ function renderAdvice(){
   // 弱いリフトの底上げ
   const weak=weakestLift();
   if(weak){
-    html+=`<div class="flag warn">${ic('trending-up')}<span><b>${weak.short}</b>がベンチ基準比で弱め（${Math.round(weak.ratio*100)}%）。`
+    // anchor自身が最弱＝比率は必ず100%なので「弱め（100%）」とは書かない（2026-08-14）
+    const lead = weak.isAnchor
+      ? `他のリフトが標準比を上回っています。<b>${weak.short}</b>が相対的に遅れ気味です。`
+      : `<b>${weak.short}</b>がベンチ基準比で弱め（${Math.round(weak.ratio*100)}%）。`;
+    html+=`<div class="flag warn">${ic('trending-up')}<span>${lead}`
       +`${weak.short}の日を週はじめに置くと伸びやすいです。</span></div>`;
   }
   html+=`<p class="sub">一般的なガイドラインに基づく自動提案です。痛みがある場合は中止し専門家に相談してください。</p>`;
@@ -2371,6 +2424,16 @@ function supplementHTML(){
   // カード画像がある名前だけ、行タップでカード全画面を出す（2026-08-02l。種目一覧の🖼と同じ openPoster）。
   // 画像が無い名前は従来どおりテキストのみ＝タップ不可。
   const galImg=(window.GALLERY&&window.GALLERY.exerciseImages)||{};
+  // 部位の週セット達成率（2026-08-14）＝renderAdvice と同じ式（lastMap の sets/weeks ÷ targetOf）。
+  // 強化種目の行にだけ「その部位はもう足りている」ことを小さく添える。lastMap が無い（記録ゼロ）ときは注記なし。
+  const partRate={};
+  if(lastMap && lastMap.weeks) PARTS.forEach(p=>{ partRate[p.key]=(lastMap.sets[p.key]/lastMap.weeks)/targetOf(p.key); });
+  const exPartOf={}; (DB.exercises||[]).forEach(e=>{ if(e && e.name && !(e.name in exPartOf)) exPartOf[e.name]=e.part; });
+  const rateNote=(name)=>{
+    const pk=exPartOf[name]; if(!pk) return '';                       // マスタに無い＝注記なし
+    const r=partRate[pk]; if(r==null || !isFinite(r) || r<1) return '';  // 100%未満は出さない
+    return `<span class="sup-note">※${partOf(pk).name}は現在${Math.round(r*100)}%</span>`;
+  };
   const rows=items.map(it=>{
     // 🖼＝カード画像がある行はタップで全画面表示。**モビリティだけでなく強化種目の行も対象**
     //    （2026-08-04・ユーザー要望「補うといいことに出てくる種目をクリックすると画像を表示」）。
@@ -2385,9 +2448,10 @@ function supplementHTML(){
         +`<div class="sup-why">${esc(it.why)}。<span class="sup-dose">${esc(it.how)}・記録は不要</span></div></div></div>`;
     }
     const tag = it.kind==='cardio' ? '有酸素' : '強化';
+    const note = it.kind==='assist' ? rateNote(it.name) : '';   // 有酸素・モビリティには付けない
     return `<div class="sup-item${tapC}"${tapA}><span class="sup-dot"></span><div class="sup-body">`
       +`<div class="sup-nm">${esc(it.name)}<span class="sup-tag">${tag}</span>${img}</div>`
-      +`<div class="sup-why">${esc(it.why)}</div></div></div>`;
+      +`<div class="sup-why">${esc(it.why)}${note}</div></div></div>`;
   }).join('');
   return head+rows+`<p class="sub">一般的なガイドラインに基づく自動提案です（最大5件）。痛みがある場合は行わず専門家に相談してください。</p></div>`;
 }
@@ -2905,6 +2969,8 @@ function editExercise(id){
     <label>種目名</label><input id="ee-name" value="${esc(e.name)}">
     <label class="mt">主に効く部位</label><select id="ee-part">${partOpts}</select>
     <label class="mt">補助的に効く部位</label><div id="ee-sec" class="mb">${secPills}</div>
+    <label class="kg-toggle"><input type="checkbox" id="ee-nocount" ${e.noCount?'checked':''}> 集計に入れない（練習種目）</label>
+    <p class="note mb">オンにすると週セット数・部位バランス・人体図の負荷から外れます。<b>記録・履歴・推定1RMはそのまま残ります</b>。</p>
     <div class="row"><button class="btn" onclick="saveExEdit('${id}')">保存</button>
     <button class="btn ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
@@ -2914,6 +2980,9 @@ function saveExEdit(id){
   e.name=document.getElementById('ee-name').value.trim()||e.name;
   e.part=document.getElementById('ee-part').value;
   e.sec=[...document.querySelectorAll('#ee-sec .pill.on')].map(x=>x.dataset.k).filter(k=>k!==e.part);
+  // 集計から外す（2026-08-14）。**オフのときはキーごと消す**＝既定undefinedのまま＝既存JSONと差分ゼロ
+  const nc=document.getElementById('ee-nocount');
+  if(nc && nc.checked) e.noCount=true; else delete e.noCount;
   stamp(e);
   // 種目のマージキーは名前。改名は「旧名を消して新名を作る」と等価なので旧名に墓標を立てる
   // （立てないと相手端末に旧名のカードが残り、同じidが二重に現れる）
@@ -2951,7 +3020,7 @@ function renderExList(){
       const muscles=[dot('var(--mt-main)',primary),dot('var(--mt-sub)',secondary),dot('var(--mt-inv)',tertiary)].filter(Boolean).join(' &nbsp;');
       html+=`<div class="ex-item">
         <button class="star ${e.fav?'on':''}" onclick="toggleFav('${e.id}')">${ic('star')}</button>
-        <div class="nm">${esc(exLabel(e.name))}<br><span class="muted" style="font-size:11px">${muscles}</span></div>
+        <div class="nm">${esc(exLabel(e.name))}${e.noCount?'<span class="ex-badge">集計外</span>':''}<br><span class="muted" style="font-size:11px">${muscles}</span></div>
         <button class="btn sec small" onclick="showHowEx('${e.id}')">${ic('play')}</button>
         <button class="btn sec small" onclick="showImgEx('${e.id}')">${ic('image')}</button>
         <button class="star" onclick="editExercise('${e.id}')">${ic('pencil')}</button>
@@ -3062,6 +3131,7 @@ const LOAD_OVERRIDE = {
   "お尻のストレッチ": {},
 };
 function loadFactors(ex){
+  if(ex.noCount) return {};   // 集計から外す種目（2026-08-14・種目編集のチェック）＝ストレッチのLOAD_OVERRIDE {} と同じ扱い
   const o = LOAD_OVERRIDE[ex.name];
   if(o) return o;
   const f = {}; f[ex.part] = 1.0;
@@ -3993,6 +4063,7 @@ function fmtTop(t){ return t<1? t.toFixed(1): Math.round(t); }
 function latestBW(){ return DB.bodyweight.length? DB.bodyweight[DB.bodyweight.length-1].kg : 0; }
 function renderStrength(){
   renderGoals(); // 機能E1：筋力目標カード（体重未入力でも表示するため先頭で呼ぶ）
+  renderE1rmChart(); // 推定1RM推移（2026-08-14）＝体重未入力でも出す（下に体重ゲートのreturnがあるので先頭で呼ぶ）
   document.getElementById('st-sex').value=DB.settings.sex;
   document.getElementById('st-age').value=DB.settings.age||'';
   const bwInput=document.getElementById('st-bw'); if(document.activeElement!==bwInput) bwInput.value=latestBW()||'';
@@ -4050,6 +4121,72 @@ function renderStrength(){
       }).join('')+`</tr>`;
     }).join('')+`</table></div>
     <p class="note">単位kg。緑＝達成済み。体重(アロメトリック)・年齢(1歳刻み)・性別を考慮。${curStBasis==='general'?'一般成人基準は「成人の約'+(TRAIN_FRACTION*100)+'%が筋トレ」と仮定した推計のため目安です。':''}</p>`;
+}
+
+//=========== 推定1RMの推移（2026-08-14・筋力タブ末尾） ===========
+// 集計・DB・同期には一切触らない**読むだけ**の機能。値は既存の e1rmSet() をそのまま使う
+// （reps>15 は 0 が返る＝高回数セットは点にしない。1RM系の値がタブ間でズレないようにするため）。
+let curE1rmEx=null;   // 選択中の種目id（保存しない＝リロードで既定に戻る。DB・エクスポートを汚さない）
+// その種目の系列＝**同じ日は1点にまとめ**、その日の最高 e1rmSet を採る（1日に同じ種目を2回記録しても点は1つ）
+function e1rmSeriesFor(exId){
+  const byDate={};
+  (DB.logs||[]).forEach(l=>{
+    if(l.exId!==exId) return;
+    let best=0; (l.sets||[]).forEach(s=>{ const v=e1rmSet(s.weight,s.reps); if(v>best) best=v; });
+    if(!(best>0)) return;                                   // 自重・16回以上のみのセッションは点にしない
+    if(!byDate[l.date] || best>byDate[l.date]) byDate[l.date]=best;
+  });
+  return Object.keys(byDate).sort().map(d=>({date:d, e1rm:byDate[d]}));
+}
+// セレクトに出す種目＝e1rmSet が1回でも算出できたログを持つものだけ。並びは「最後に記録した日が新しい順」
+function e1rmCandidates(){
+  const last={};
+  (DB.logs||[]).forEach(l=>{
+    if(!(l.sets||[]).some(s=>e1rmSet(s.weight,s.reps)>0)) return;
+    if(!last[l.exId] || l.date>last[l.exId]) last[l.exId]=l.date;
+  });
+  return Object.keys(last).map(id=>({id, last:last[id], ex:DB.exercises.find(e=>e.id===id)}))
+    .filter(o=>o.ex)
+    .sort((a,b)=> a.last<b.last?1 : a.last>b.last?-1 : EX_COLLATOR.compare(a.ex.name,b.ex.name));
+}
+function setE1rmEx(id){ curE1rmEx=id; renderE1rmChart(); }
+function renderE1rmChart(){
+  const pick=document.getElementById('e1rm-pick'), chart=document.getElementById('e1rm-chart');
+  const lab=document.getElementById('e1rm-label');
+  if(!pick||!chart) return;
+  const cands=e1rmCandidates();
+  if(!cands.length){
+    pick.innerHTML=''; if(lab) lab.textContent='';
+    chart.innerHTML='<div class="empty">重量×回数を記録すると、種目ごとの推定1RMの推移が出ます（16回以上のセットは推定に使いません）。</div>';
+    return;
+  }
+  if(!cands.some(c=>c.id===curE1rmEx)) curE1rmEx=cands[0].id;   // 既定＝最も直近に記録した種目
+  pick.innerHTML=`<div class="e1rm-pick"><select id="e1rm-ex" onchange="setE1rmEx(this.value)" aria-label="種目を選ぶ">`
+    +cands.map(c=>`<option value="${c.id}"${c.id===curE1rmEx?' selected':''}>${esc(exLabel(c.ex.name))}</option>`).join('')
+    +`</select></div>`;
+  const rows=e1rmSeriesFor(curE1rmEx);
+  if(lab) lab.textContent=rows.length?`${rows.length}回分`:'';
+  if(rows.length===0){ chart.innerHTML='<div class="empty">この種目には推定1RMを計算できる記録がありません。</div>'; return; }
+  const W=320,H=140,padL=34,padR=14,padT=20,padB=26;
+  const vals=rows.map(r=>r.e1rm), n=rows.length;
+  const min=Math.min(...vals), max=Math.max(...vals), rng=Math.max(max-min, 1);
+  const xs=rows.map((r,i)=> n>1 ? padL+i/(n-1)*(W-padL-padR) : (padL+W-padR)/2);
+  const ys=rows.map(r=> H-padB-(r.e1rm-min)/rng*(H-padT-padB));
+  const line = n>1 ? `<polyline points="${xs.map((x,i)=>x.toFixed(1)+','+ys[i].toFixed(1)).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"/>` : '';
+  const dots = xs.map((x,i)=>`<circle cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="var(--accent)"><title>${rows[i].date} ${Math.round(rows[i].e1rm)}kg</title></circle>`).join('');
+  // 数値ラベルは間引く（点が多いと重なって読めない）。最後の点は必ず出す
+  const step=Math.max(1, Math.ceil(n/5));
+  const labels=xs.map((x,i)=>{
+    if(i%step!==0 && i!==n-1) return '';
+    return `<text x="${x.toFixed(1)}" y="${(ys[i]-7).toFixed(1)}" fill="var(--sub)" font-size="10" text-anchor="middle">${Math.round(rows[i].e1rm)}</text>`;
+  }).join('');
+  const mmd=n>1?`<text x="2" y="${padT-8}" fill="var(--sub)" font-size="10">${Math.round(max)}kg</text>`
+    +`<text x="2" y="${H-padB+4}" fill="var(--sub)" font-size="10">${Math.round(min)}kg</text>`:'';
+  const dates=`<text x="${xs[0].toFixed(1)}" y="${H-6}" fill="var(--sub)" font-size="10" text-anchor="${n>1?'start':'middle'}">${rows[0].date.slice(5)}</text>`
+    +(n>1?`<text x="${xs[n-1].toFixed(1)}" y="${H-6}" fill="var(--sub)" font-size="10" text-anchor="end">${rows[n-1].date.slice(5)}</text>`:'');
+  chart.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="推定1RMの推移">${line}${dots}${labels}${mmd}${dates}</svg>`
+    +(n===1?`<p class="note">記録が2回以上になると推移が見えます。</p>`
+           :`<p class="note">最新 <b>${Math.round(rows[n-1].e1rm)}kg</b>（${rows[n-1].date}） / 最高 <b>${Math.round(max)}kg</b> ・ 単位kg。各日の最高セットから推定（16回以上のセットは除外）。</p>`);
 }
 
 //=========== 設定 ===========
