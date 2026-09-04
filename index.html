@@ -937,7 +937,7 @@ const SECONDARY = {
 };
 
 //=========== ストレージ ===========
-const APP_VERSION="2026.08.14c";
+const APP_VERSION="2026.09.05a";
 const LS="kintore_balance_v2";
 let _brokenStashed=false; // load()で破損データを退避したら true（起動時案内用）。load()呼び出し前に宣言（TDZ回避）
 let DB = load();
@@ -1840,11 +1840,11 @@ function recExercisesFor(part, n){
   const cs=new Date(cut-cut.getTimezoneOffset()*60000).toISOString().slice(0,10);
   const freq={};
   DB.logs.forEach(l=>{ if(l.date<cs) return; const ex=DB.exercises.find(e=>e.id===l.exId);
-    if(ex&&ex.part===part){ freq[ex.name]=(freq[ex.name]||0)+1; } });
+    if(ex&&ex.part===part&&!ex.noCount){ freq[ex.name]=(freq[ex.name]||0)+1; } });   // 集計外(noCount)の種目は勧めない（2026-09-05 B1）
   const out=Object.keys(freq).sort((a,b)=>freq[b]-freq[a]);
   const rep=REP_EXERCISES[part];
-  if(rep && DB.exercises.some(e=>e.name===rep) && !out.includes(rep)) out.push(rep);
-  if(out.length<n){ DB.exercises.filter(e=>e.part===part).forEach(e=>{ if(!out.includes(e.name)) out.push(e.name); }); }
+  if(rep && DB.exercises.some(e=>e.name===rep && !e.noCount) && !out.includes(rep)) out.push(rep);
+  if(out.length<n){ DB.exercises.filter(e=>e.part===part&&!e.noCount).forEach(e=>{ if(!out.includes(e.name)) out.push(e.name); }); }
   return out.slice(0,n);
 }
 // 機能A＋F3：🎯コーチ（今週のミッション＋不足部位おすすめ）。カードは増やさず「今日のおすすめ」を改組
